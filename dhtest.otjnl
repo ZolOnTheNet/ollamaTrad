@@ -1,0 +1,22 @@
+{
+  "file_path": "dhtest.json",
+  "file_hash": "cc92275e6fd85c154bdeafb6c5156937",
+  "tags": [],
+  "context": "",
+  "last_modified": "2025-09-22T17:10:16.075727",
+  "processing_notes": [
+    "[2025-09-22T17:10:16.075733] Traduit 'entries/Electric Eels/tokenName' en fr",
+    "[2025-09-22T17:10:18.031366] Traduit 'entries/Vault Guardian Gaoler/tokenName' en fr",
+    "[2025-09-22T17:10:19.307259] Traduit 'entries/Deeproot Defender/tokenName' en fr",
+    "[2025-09-22T17:10:20.708410] Traduit 'entries/Young Ice Dragon/tokenName' en fr",
+    "[2025-09-22T17:10:21.608002] Traduit 'entries/Spy/tokenName' en fr",
+    "[2025-09-22T17:10:23.418544] Traduit 'entries/Demon of Avarice/tokenName' en fr",
+    "[2025-09-22T17:10:25.078702] Traduit 'entries/Giant Beastmaster/tokenName' en fr",
+    "[2025-09-22T17:10:26.531691] Traduit 'entries/Elite Soldier/tokenName' en fr",
+    "[2025-09-22T17:10:28.003558] Traduit 'entries/Minor Fire Elemental/tokenName' en fr",
+    "[2025-09-23T23:10:20.888530] Traduit 'entries/Electric Eels/description' en fr",
+    "[2025-09-23T23:12:04.010026] Traduit 'entries/Electric Eels/description' en fr",
+    "[2025-09-23T23:20:40.997684] Traduit 'entries/Electric Eels/description' en fr"
+  ],
+  "custom_fields": {}
+}

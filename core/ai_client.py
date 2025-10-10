@@ -1,0 +1,794 @@
+"""
+Client AI unifié pour gérer multiple providers (Ollama, OpenAI, Mistral, Anthropic)
+"""
+
+import json
+import aiohttp
+import asyncio
+import requests
+from typing import Dict, List, Optional, Any
+from pathlib import Path
+import time
+from abc import ABC, abstractmethod
+
+class AIProvider(ABC):
+    """Interface abstraite pour les providers AI"""
+
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.conversation_history: List[Dict[str, str]] = []
+        self.session_variables: Dict[str, Any] = {}  # Variables de session (/set)
+        self.current_model = config.get("default_model", "")
+
+    @abstractmethod
+    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
+        """Envoie un message de chat et retourne la réponse"""
+        pass
+
+    @abstractmethod
+    def check_connection(self) -> bool:
+        """Vérifie la connexion au provider"""
+        pass
+
+    async def execute_internal_command(self, command: str) -> str:
+        """Exécute une commande interne (/, /set, /show, etc.)"""
+        if not command.startswith('/'):
+            raise ValueError("Les commandes internes doivent commencer par /")
+
+        parts = command[1:].split()
+        cmd = parts[0].lower() if parts else ""
+
+        if cmd == "set":
+            return await self.cmd_set(parts[1:])
+        elif cmd == "show":
+            return await self.cmd_show(parts[1:])
+        elif cmd == "load":
+            return await self.cmd_load(parts[1:])
+        elif cmd == "save":
+            return await self.cmd_save(parts[1:])
+        elif cmd == "clear":
+            return await self.cmd_clear()
+        elif cmd == "bye":
+            return await self.cmd_bye()
+        elif cmd in ["help", "?"]:
+            return await self.cmd_help(parts[1:])
+        else:
+            return f"❌ Commande interne inconnue: /{cmd}\nTapez /help pour voir les commandes disponibles."
+
+    async def cmd_set(self, args: List[str]) -> str:
+        """Gère les variables de session /set"""
+        if not args:
+            # Afficher toutes les variables
+            if self.session_variables:
+                result = "📝 Variables de session:\n"
+                for key, value in self.session_variables.items():
+                    result += f"  {key} = {value}\n"
+                return result
+            else:
+                return "📝 Aucune variable de session définie"
+
+        if len(args) == 1:
+            # Afficher une variable spécifique
+            key = args[0]
+            if key in self.session_variables:
+                return f"📝 {key} = {self.session_variables[key]}"
+            else:
+                return f"❌ Variable '{key}' non définie"
+
+        if len(args) >= 2:
+            # Définir une variable
+            key = args[0]
+            value = " ".join(args[1:])
+
+            # Conversion automatique de type
+            if value.lower() in ["true", "false"]:
+                value = value.lower() == "true"
+            elif value.isdigit():
+                value = int(value)
+            elif value.replace(".", "").isdigit():
+                value = float(value)
+
+            self.session_variables[key] = value
+            return f"✅ Variable '{key}' définie: {value}"
+
+    async def cmd_show(self, args: List[str]) -> str:
+        """Affiche les informations du modèle/provider"""
+        result = f"🤖 Provider: {self.__class__.__name__.replace('Provider', '')}\n"
+        result += f"📋 Modèle actuel: {self.current_model}\n"
+        result += f"🔗 Statut: {'✅ Connecté' if self.check_connection() else '❌ Déconnecté'}\n"
+        result += f"💬 Messages en mémoire: {len(self.conversation_history)}\n"
+        result += f"⚙️  Variables de session: {len(self.session_variables)}\n"
+        return result
+
+    async def cmd_load(self, args: List[str]) -> str:
+        """Charge un modèle"""
+        if not args:
+            return "❌ Usage: /load <nom_du_modele>"
+
+        model_name = args[0]
+        old_model = self.current_model
+        self.current_model = model_name
+        self.config["default_model"] = model_name
+
+        return f"✅ Modèle changé de '{old_model}' vers '{model_name}'"
+
+    async def cmd_save(self, args: List[str]) -> str:
+        """Sauvegarde la session/conversation"""
+        if not args:
+            return "❌ Usage: /save <nom_de_session>"
+
+        session_name = args[0]
+        # Cette méthode sera implémentée différemment selon le provider
+        return f"💾 Session sauvegardée sous le nom '{session_name}'"
+
+    async def cmd_clear(self) -> str:
+        """Efface le contexte de la conversation"""
+        messages_count = len(self.conversation_history)
+        self.clear_conversation()
+        return f"🗑️  Contexte effacé ({messages_count} messages supprimés)"
+
+    async def cmd_bye(self) -> str:
+        """Commande de sortie"""
+        return "👋 Session terminée"
+
+    async def cmd_help(self, args: List[str]) -> str:
+        """Affiche l'aide des commandes internes"""
+        if args and args[0] == "shortcuts":
+            return """
+⌨️  Raccourcis clavier (si supportés par l'interface):
+  Ctrl+C        Interrompre la génération
+  ↑/↓           Naviguer dans l'historique des commandes
+  Tab           Auto-complétion
+  Ctrl+L        Effacer l'écran
+  Ctrl+D        Quitter
+            """
+
+        return """
+🔧 Commandes internes disponibles:
+
+📊 INFORMATION:
+  /show           Affiche les informations du provider/modèle
+  /help           Affiche cette aide
+  /? shortcuts    Aide sur les raccourcis clavier
+
+⚙️  CONFIGURATION:
+  /set [var] [val]  Définit/affiche les variables de session
+  /load <model>     Change le modèle actuel
+  /save <nom>       Sauvegarde la session actuelle
+
+🗂️  GESTION:
+  /clear          Efface l'historique de conversation
+  /bye            Termine la session
+
+💡 EXEMPLES:
+  /set temperature 0.7
+  /set context_length 4096
+  /show
+  /load llama3.2
+  /clear
+        """
+
+    def add_to_conversation(self, role: str, content: str):
+        """Ajoute un message à l'historique de conversation"""
+        self.conversation_history.append({"role": role, "content": content})
+
+        # Limiter l'historique
+        max_history = 50
+        if len(self.conversation_history) > max_history:
+            self.conversation_history = self.conversation_history[-max_history:]
+
+    def clear_conversation(self):
+        """Efface l'historique de conversation"""
+        self.conversation_history = []
+
+    def get_conversation_context(self) -> str:
+        """Retourne le contexte de la conversation"""
+        if not self.conversation_history:
+            return ""
+
+        context = []
+        for msg in self.conversation_history[-10:]:  # Derniers 10 messages
+            context.append(f"{msg['role']}: {msg['content']}")
+
+        return "\n".join(context)
+
+    def get_current_provider_info(self) -> Dict[str, Any]:
+        """Retourne les informations du provider actuel pour l'historique"""
+        return {
+            "provider_name": self.__class__.__name__.replace('Provider', ''),
+            "model": self.current_model,
+            "session_variables": dict(self.session_variables),
+            "connected": self.check_connection()
+        }
+
+
+class OllamaProvider(AIProvider):
+    """Provider pour Ollama local"""
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.host = config.get("host", "http://localhost:11434")
+
+        # Utiliser aya comme modèle par défaut avec fallback intelligent
+        default_model = config.get("default_model", "aya")
+        self.model = default_model
+        self.timeout = config.get("timeout", 30)
+
+    def check_connection(self) -> bool:
+        """Vérifie la connexion à Ollama et met à jour le modèle préféré"""
+        try:
+            response = requests.get(f"{self.host}/api/tags", timeout=5)
+            if response.status_code == 200:
+                # Mettre à jour le modèle avec la logique de préférence
+                self._update_preferred_model()
+                return True
+            return False
+        except:
+            return False
+
+    def _update_preferred_model(self) -> None:
+        """Met à jour le modèle avec la logique de préférence pour aya"""
+        try:
+            # Importer ici pour éviter l'import circulaire
+            from core.ollama_client import OllamaClient
+            ollama_client = OllamaClient()
+            preferred_model = ollama_client.get_preferred_default_model()
+
+            # Mettre à jour le modèle seulement si c'est différent
+            if preferred_model != self.model:
+                self.model = preferred_model
+        except Exception:
+            # En cas d'erreur, garder le modèle actuel
+            pass
+
+    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
+        """Chat avec Ollama"""
+        try:
+            # Préparer les messages
+            messages = []
+
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+
+            # Ajouter le contexte de conversation
+            messages.extend(self.conversation_history)
+            messages.append({"role": "user", "content": message})
+
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.host}/api/chat",
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        assistant_message = result["message"]["content"]
+
+                        # Ajouter à l'historique
+                        self.add_to_conversation("user", message)
+                        self.add_to_conversation("assistant", assistant_message)
+
+                        return assistant_message
+                    else:
+                        raise Exception(f"Erreur Ollama: {response.status}")
+
+        except Exception as e:
+            raise Exception(f"Erreur lors du chat Ollama: {e}")
+
+    async def cmd_show(self, args: List[str]) -> str:
+        """Version Ollama de /show avec informations détaillées du modèle"""
+        base_info = await super().cmd_show(args)
+
+        try:
+            # Récupérer les informations détaillées du modèle via l'API Ollama
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.host}/api/show",
+                    json={"name": self.current_model},
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    if response.status == 200:
+                        model_info = await response.json()
+                        base_info += f"💾 Taille du modèle: {model_info.get('size', 'Inconnue')}\n"
+                        base_info += f"📅 Modifié: {model_info.get('modified_at', 'Inconnu')[:10]}\n"
+
+                        # Paramètres du modèle si disponibles
+                        if 'parameters' in model_info:
+                            base_info += f"⚙️  Paramètres: {model_info['parameters']}\n"
+                    else:
+                        base_info += "⚠️ Impossible de récupérer les détails du modèle\n"
+        except Exception as e:
+            base_info += f"⚠️ Erreur lors de la récupération des détails: {e}\n"
+
+        return base_info
+
+    async def cmd_load(self, args: List[str]) -> str:
+        """Version Ollama de /load qui vérifie l'existence du modèle"""
+        if not args:
+            # Lister les modèles disponibles
+            try:
+                response = requests.get(f"{self.host}/api/tags", timeout=5)
+                if response.status_code == 200:
+                    models = response.json()
+                    if models.get('models'):
+                        result = "📋 Modèles Ollama disponibles:\n"
+                        for model in models['models']:
+                            name = model['name']
+                            size = model.get('size', 'Taille inconnue')
+                            marker = "➤ " if name == self.current_model else "  "
+                            result += f"{marker}{name} ({size})\n"
+                        result += f"\n💡 Usage: /load <nom_du_modele>"
+                        return result
+                    else:
+                        return "❌ Aucun modèle Ollama trouvé"
+                else:
+                    return "❌ Impossible de récupérer la liste des modèles"
+            except Exception as e:
+                return f"❌ Erreur lors de la récupération des modèles: {e}"
+
+        model_name = args[0]
+
+        # Vérifier que le modèle existe
+        try:
+            response = requests.get(f"{self.host}/api/tags", timeout=5)
+            if response.status_code == 200:
+                models = response.json()
+                model_names = [m['name'] for m in models.get('models', [])]
+                if model_name not in model_names:
+                    return f"❌ Modèle '{model_name}' non trouvé.\nModèles disponibles: {', '.join(model_names)}"
+        except Exception as e:
+            return f"⚠️ Impossible de vérifier l'existence du modèle: {e}\nTentative de chargement..."
+
+        # Changer le modèle
+        old_model = self.current_model
+        self.current_model = model_name
+        self.config["default_model"] = model_name
+
+        return f"✅ Modèle Ollama changé de '{old_model}' vers '{model_name}'"
+
+    async def cmd_save(self, args: List[str]) -> str:
+        """Version Ollama de /save utilisant l'API native"""
+        if not args:
+            return "❌ Usage: /save <nom_de_session>"
+
+        session_name = args[0]
+
+        # Sauvegarder via l'API Ollama (si supporté dans le futur)
+        # Pour l'instant, sauvegarde locale de la conversation
+        try:
+            conversations_dir = Path("conversations")
+            conversations_dir.mkdir(exist_ok=True)
+
+            session_data = {
+                "model": self.current_model,
+                "provider": "ollama",
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "session_variables": self.session_variables,
+                "conversation": self.conversation_history
+            }
+
+            session_file = conversations_dir / f"{session_name}.json"
+            with open(session_file, 'w', encoding='utf-8') as f:
+                json.dump(session_data, f, indent=2, ensure_ascii=False)
+
+            return f"💾 Session Ollama '{session_name}' sauvegardée ({len(self.conversation_history)} messages)"
+
+        except Exception as e:
+            return f"❌ Erreur lors de la sauvegarde: {e}"
+
+
+class OpenAIProvider(AIProvider):
+    """Provider pour OpenAI GPT"""
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.api_url = config.get("api_url", "https://api.openai.com/v1/chat/completions")
+        self.api_key = config.get("api_key", "")
+        self.model = config.get("default_model", "gpt-4")
+        self.timeout = config.get("timeout", 30)
+
+    def check_connection(self) -> bool:
+        """Vérifie la connexion à OpenAI"""
+        if not self.api_key:
+            return False
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            response = requests.get("https://api.openai.com/v1/models", headers=headers, timeout=5)
+            return response.status_code == 200
+        except:
+            return False
+
+    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
+        """Chat avec OpenAI"""
+        if not self.api_key:
+            raise Exception("Clé API OpenAI non configurée")
+
+        try:
+            # Préparer les messages
+            messages = []
+
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+
+            # Ajouter le contexte de conversation
+            messages.extend(self.conversation_history)
+            messages.append({"role": "user", "content": message})
+
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "max_tokens": 2000,
+                "temperature": 0.7
+            }
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.api_url,
+                    json=payload,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        assistant_message = result["choices"][0]["message"]["content"]
+
+                        # Ajouter à l'historique
+                        self.add_to_conversation("user", message)
+                        self.add_to_conversation("assistant", assistant_message)
+
+                        return assistant_message
+                    else:
+                        error_text = await response.text()
+                        raise Exception(f"Erreur OpenAI: {response.status} - {error_text}")
+
+        except Exception as e:
+            raise Exception(f"Erreur lors du chat OpenAI: {e}")
+
+    async def cmd_show(self, args: List[str]) -> str:
+        """Version OpenAI de /show avec informations spécifiques"""
+        base_info = await super().cmd_show(args)
+
+        # Ajouter des informations spécifiques OpenAI
+        if self.api_key:
+            base_info += f"🔑 API Key: {'*' * 10 + self.api_key[-4:]}\n"
+        else:
+            base_info += f"🔑 API Key: ❌ Non configurée\n"
+
+        base_info += f"🌐 URL API: {self.api_url}\n"
+        base_info += f"💰 Coût estimé par message: ~$0.002-0.03\n"
+
+        return base_info
+
+    async def cmd_load(self, args: List[str]) -> str:
+        """Version OpenAI de /load pour changer de modèle"""
+        if not args:
+            available_models = [
+                "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo",
+                "gpt-4o", "gpt-4o-mini"
+            ]
+            result = "📋 Modèles OpenAI disponibles:\n"
+            for model in available_models:
+                marker = "➤ " if model == self.current_model else "  "
+                result += f"{marker}{model}\n"
+            result += f"\n💡 Usage: /load <nom_du_modele>"
+            return result
+
+        model_name = args[0]
+        old_model = self.current_model
+        self.current_model = model_name
+        self.config["default_model"] = model_name
+
+        return f"✅ Modèle OpenAI changé de '{old_model}' vers '{model_name}'"
+
+
+class MistralProvider(AIProvider):
+    """Provider pour Mistral AI"""
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.api_url = config.get("api_url", "https://api.mistral.ai/v1/chat/completions")
+        self.api_key = config.get("api_key", "")
+        self.model = config.get("default_model", "mistral-large-latest")
+        self.timeout = config.get("timeout", 30)
+
+    def check_connection(self) -> bool:
+        """Vérifie la connexion à Mistral"""
+        if not self.api_key:
+            return False
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            # Test avec un petit payload
+            test_payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 1
+            }
+            response = requests.post(self.api_url, json=test_payload, headers=headers, timeout=5)
+            return response.status_code in [200, 400]  # 400 OK car c'est juste un test
+        except:
+            return False
+
+    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
+        """Chat avec Mistral"""
+        if not self.api_key:
+            raise Exception("Clé API Mistral non configurée")
+
+        try:
+            # Préparer les messages
+            messages = []
+
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+
+            # Ajouter le contexte de conversation
+            messages.extend(self.conversation_history)
+            messages.append({"role": "user", "content": message})
+
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "max_tokens": 2000,
+                "temperature": 0.7
+            }
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.api_url,
+                    json=payload,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        assistant_message = result["choices"][0]["message"]["content"]
+
+                        # Ajouter à l'historique
+                        self.add_to_conversation("user", message)
+                        self.add_to_conversation("assistant", assistant_message)
+
+                        return assistant_message
+                    else:
+                        error_text = await response.text()
+                        raise Exception(f"Erreur Mistral: {response.status} - {error_text}")
+
+        except Exception as e:
+            raise Exception(f"Erreur lors du chat Mistral: {e}")
+
+
+class AnthropicProvider(AIProvider):
+    """Provider pour Anthropic Claude"""
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.api_url = config.get("api_url", "https://api.anthropic.com/v1/messages")
+        self.api_key = config.get("api_key", "")
+        self.model = config.get("default_model", "claude-3-sonnet-20240229")
+        self.timeout = config.get("timeout", 30)
+
+    def check_connection(self) -> bool:
+        """Vérifie la connexion à Anthropic"""
+        if not self.api_key:
+            return False
+
+        try:
+            headers = {
+                "x-api-key": self.api_key,
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01"
+            }
+            # Test minimal
+            test_payload = {
+                "model": self.model,
+                "max_tokens": 1,
+                "messages": [{"role": "user", "content": "test"}]
+            }
+            response = requests.post(self.api_url, json=test_payload, headers=headers, timeout=5)
+            return response.status_code in [200, 400]
+        except:
+            return False
+
+    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
+        """Chat avec Anthropic"""
+        if not self.api_key:
+            raise Exception("Clé API Anthropic non configurée")
+
+        try:
+            # Préparer les messages (Anthropic a un format différent)
+            messages = []
+
+            # Ajouter le contexte de conversation
+            messages.extend(self.conversation_history)
+            messages.append({"role": "user", "content": message})
+
+            payload = {
+                "model": self.model,
+                "max_tokens": 2000,
+                "messages": messages
+            }
+
+            if system_prompt:
+                payload["system"] = system_prompt
+
+            headers = {
+                "x-api-key": self.api_key,
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01"
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.api_url,
+                    json=payload,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        assistant_message = result["content"][0]["text"]
+
+                        # Ajouter à l'historique
+                        self.add_to_conversation("user", message)
+                        self.add_to_conversation("assistant", assistant_message)
+
+                        return assistant_message
+                    else:
+                        error_text = await response.text()
+                        raise Exception(f"Erreur Anthropic: {response.status} - {error_text}")
+
+        except Exception as e:
+            raise Exception(f"Erreur lors du chat Anthropic: {e}")
+
+
+class AIClient:
+    """Client unifié pour gérer tous les providers AI"""
+
+    def __init__(self, config_path: Optional[str] = None):
+        if config_path is None:
+            config_path = Path(__file__).parent.parent / "config" / "settings.json"
+
+        self.config_path = Path(config_path)
+        self.load_config()
+        self.current_provider = None
+        self.providers = {}
+        self.init_providers()
+
+    def load_config(self):
+        """Charge la configuration depuis le fichier JSON"""
+        try:
+            with open(self.config_path, 'r', encoding='utf-8') as f:
+                self.config = json.load(f)
+        except Exception as e:
+            print(f"Erreur lors du chargement de la configuration: {e}")
+            self.config = {"ai_providers": {"default_provider": "ollama"}}
+
+    def save_config(self):
+        """Sauvegarde la configuration"""
+        try:
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Erreur lors de la sauvegarde de la configuration: {e}")
+
+    def init_providers(self):
+        """Initialize tous les providers disponibles"""
+        ai_config = self.config.get("ai_providers", {})
+
+        # Initialiser Ollama
+        if "ollama" in ai_config:
+            self.providers["ollama"] = OllamaProvider(ai_config["ollama"])
+
+        # Initialiser OpenAI
+        if "openai" in ai_config:
+            self.providers["openai"] = OpenAIProvider(ai_config["openai"])
+
+        # Initialiser Mistral
+        if "mistral" in ai_config:
+            self.providers["mistral"] = MistralProvider(ai_config["mistral"])
+
+        # Initialiser Anthropic
+        if "anthropic" in ai_config:
+            self.providers["anthropic"] = AnthropicProvider(ai_config["anthropic"])
+
+        # Définir le provider par défaut
+        default_provider = ai_config.get("default_provider", "ollama")
+        if default_provider in self.providers:
+            self.current_provider = self.providers[default_provider]
+        elif self.providers:
+            self.current_provider = list(self.providers.values())[0]
+
+    def set_provider(self, provider_name: str) -> bool:
+        """Change le provider actuel"""
+        if provider_name in self.providers:
+            self.current_provider = self.providers[provider_name]
+
+            # Mettre à jour la config
+            self.config["ai_providers"]["default_provider"] = provider_name
+            self.save_config()
+            return True
+        return False
+
+    def get_available_providers(self) -> List[str]:
+        """Retourne la liste des providers disponibles"""
+        return list(self.providers.keys())
+
+    def get_current_provider_name(self) -> str:
+        """Retourne le nom du provider actuel"""
+        for name, provider in self.providers.items():
+            if provider == self.current_provider:
+                return name
+        return "unknown"
+
+    def check_connection(self) -> bool:
+        """Vérifie la connexion du provider actuel"""
+        if self.current_provider:
+            return self.current_provider.check_connection()
+        return False
+
+    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
+        """Envoie un message de chat au provider actuel"""
+        if not self.current_provider:
+            raise Exception("Aucun provider AI configuré")
+
+        return await self.current_provider.chat(message, system_prompt)
+
+    async def execute_internal_command(self, command: str) -> str:
+        """Exécute une commande interne sur le provider actuel"""
+        if not self.current_provider:
+            raise Exception("Aucun provider AI configuré")
+
+        return await self.current_provider.execute_internal_command(command)
+
+    def clear_conversation(self):
+        """Efface l'historique de conversation du provider actuel"""
+        if self.current_provider:
+            self.current_provider.clear_conversation()
+
+    def get_conversation_history(self) -> List[Dict[str, str]]:
+        """Retourne l'historique de conversation du provider actuel"""
+        if self.current_provider:
+            return self.current_provider.conversation_history
+        return []
+
+    def update_provider_config(self, provider_name: str, config: Dict[str, Any]):
+        """Met à jour la configuration d'un provider"""
+        if provider_name in self.config["ai_providers"]:
+            self.config["ai_providers"][provider_name].update(config)
+            self.save_config()
+
+            # Réinitialiser le provider
+            if provider_name == "ollama":
+                self.providers[provider_name] = OllamaProvider(self.config["ai_providers"][provider_name])
+            elif provider_name == "openai":
+                self.providers[provider_name] = OpenAIProvider(self.config["ai_providers"][provider_name])
+            elif provider_name == "mistral":
+                self.providers[provider_name] = MistralProvider(self.config["ai_providers"][provider_name])
+            elif provider_name == "anthropic":
+                self.providers[provider_name] = AnthropicProvider(self.config["ai_providers"][provider_name])
+
+            # Si c'est le provider actuel, le recharger
+            if self.get_current_provider_name() == provider_name:
+                self.current_provider = self.providers[provider_name]

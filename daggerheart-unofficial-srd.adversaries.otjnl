@@ -1,0 +1,14 @@
+{
+  "file_path": "/media/garrigues/foundrysrv/FoundryOG/python/ollamaFic/daggerheart-unofficial-srd.adversaries.json",
+  "file_hash": "f624287ea26229f36648790f083cfeae",
+  "tags": [],
+  "context": "",
+  "last_modified": "2025-09-18T16:45:33.537896",
+  "processing_notes": [
+    "[2025-09-18T16:45:33.537926] Traduit 'entries/Acid Burrower/name' en fr",
+    "[2025-09-18T17:05:29.564530] Traduit 'entries/Electric Eels/description' en fr",
+    "[2025-09-18T17:10:50.814833] Traduit 'entries/Electric Eels/tokenName' en fr",
+    "[2025-09-18T17:14:33.068797] Traduit 'entries/Electric Eels/description' en fr"
+  ],
+  "custom_fields": {}
+}
