@@ -1,0 +1,8 @@
+{
+  "target_languages": ["fr", "es", "de"],
+  "language_order": ["ori", "fr", "es", "de"],
+  "default_provider": "ollama",
+  "history_limit": 10,
+  "auto_create_got_json": true,
+  "backup_on_conflict": true
+}

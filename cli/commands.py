@@ -12,10 +12,13 @@ from core.ollama_client import OllamaClient
 from core.metadata import MetadataManager
 from core.ai_client import AIClient
 from core.operation_history import OperationHistoryManager
+from core.got_json_manager import GotJsonManager
+from utils.file_loader import load_file_intelligently
 
 class CLIInterface:
     def __init__(self):
         self.json_manager: Optional[JsonManager] = None
+        self.got_manager: Optional[GotJsonManager] = None  # Nouveau gestionnaire .got.json
         self.ollama_client = OllamaClient()
         self.metadata_manager = MetadataManager()
         self.ai_client = AIClient()
@@ -37,9 +40,17 @@ class CLIInterface:
             self.current_path = self.json_manager.get_current_path()
 
     def cmd_load(self, file_path: str) -> None:
-        """Charge un fichier JSON"""
+        """Charge un fichier JSON ou .got.json avec gestion intelligente"""
         try:
-            self.json_manager = JsonManager(file_path)
+            # Utiliser le nouveau système de chargement intelligent
+            self.got_manager, got_path = load_file_intelligently(file_path)
+
+            # Créer un JsonManager à partir des données du GotJsonManager
+            # pour maintenir la compatibilité avec le reste du code
+            self.json_manager = JsonManager()
+            self.json_manager.data = self.got_manager.data
+            self.json_manager.file_path = Path(got_path)
+            self.json_manager.original_data = self.got_manager.data.copy()
 
             # Configurer le hook d'historique
             def operation_hook(operation_type: str, affected_data: dict, user_input: dict = None, result: any = None):
@@ -52,25 +63,57 @@ class CLIInterface:
                 )
 
             self.json_manager.set_operation_hook(operation_hook)
-            print(f"✓ Fichier chargé: {file_path}")
+            print(f"✓ Fichier chargé: {got_path}")
 
-            # Afficher les statistiques
+            # Afficher les informations sur le .got.json
+            if self.got_manager.is_valid_got_json(self.got_manager.data):
+                header = self.got_manager.data["__ollamafic__"]
+                print(f"📦 Format: .got.json v{header['version']}")
+                print(f"📄 Fichier source: {header['original_file']}")
+                print(f"🕒 Dernière modification: {header['last_modified']}")
+
+                # Afficher les statistiques de traduction
+                stats_trans = self.got_manager.get_translation_stats()
+                print(f"\n📊 Statistiques de traduction:")
+                print(f"  - Entrées traduisibles: {stats_trans['total_entries']}")
+
+                for lang in self.got_manager.target_languages:
+                    lang_stats = stats_trans['by_language'][lang]
+                    print(f"  - {lang.upper()}: {lang_stats['translated']}/{stats_trans['total_entries']} " +
+                          f"({lang_stats['percentage']:.1f}%) traduites, " +
+                          f"{lang_stats['validated']} validées")
+
+                # Afficher les états de validation
+                val_stats = stats_trans['validation_states']
+                print(f"\n🎨 États de validation:")
+                print(f"  - ✅ Toutes validées (vert): {val_stats['green']}")
+                print(f"  - 🟠 Partiellement (orange): {val_stats['orange']}")
+                print(f"  - ❌ Non validées (rouge): {val_stats['red']}")
+                print(f"  - ⚪ Pas de traduction: {val_stats['none']}")
+
+            # Afficher les statistiques JSON
             stats = self.json_manager.get_stats()
-            print(f"📊 Statistiques:")
+            print(f"\n📊 Statistiques JSON:")
             print(f"  - Dictionnaires: {stats['dicts']}")
             print(f"  - Listes: {stats['lists']}")
             print(f"  - Valeurs: {stats['values']}")
             print(f"  - Total éléments: {stats['total_items']}")
 
-            # Charger les métadonnées
+            # Charger les métadonnées (legacy)
             metadata = self.metadata_manager.get_metadata(file_path)
             if metadata.tags:
-                print(f"🏷️  Tags: {', '.join(metadata.tags)}")
+                print(f"\n🏷️  Tags: {', '.join(metadata.tags)}")
             if metadata.context:
                 print(f"📝 Contexte: {metadata.context[:100]}...")
 
+        except FileNotFoundError as e:
+            print(f"❌ Fichier non trouvé: {e}")
+        except ValueError as e:
+            print(f"❌ Opération annulée: {e}")
         except Exception as e:
             print(f"❌ Erreur lors du chargement: {e}")
+            import traceback
+            traceback.print_exc()
 
     def cmd_ls(self, path: str = "") -> None:
         """Liste le contenu d'un chemin JSON"""

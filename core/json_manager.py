@@ -491,3 +491,29 @@ class JsonManager:
         self.pending_modifications.clear()
         # Garder seulement les modifications sauvegardées
         self.modified_paths = {k: v for k, v in self.modified_paths.items() if v == "SAVED"}
+
+    def get_translatable_paths(self) -> List[str]:
+        """
+        Liste tous les chemins vers des entrées traduisibles dans un fichier .got.json.
+
+        Returns:
+            Liste de chemins ["app/title", "app/settings/theme", ...]
+        """
+        paths = []
+
+        def traverse(obj, current_path=""):
+            if isinstance(obj, dict):
+                # Vérifier si c'est une entrée traduisible (a une clé "ori")
+                if "ori" in obj and isinstance(obj.get("ori"), str):
+                    paths.append(current_path.strip("/"))
+                else:
+                    for key, value in obj.items():
+                        if key != "__ollamafic__":  # Ignorer le header
+                            new_path = f"{current_path}/{key}"
+                            traverse(value, new_path)
+            elif isinstance(obj, list):
+                for i, item in enumerate(obj):
+                    traverse(item, f"{current_path}[{i}]")
+
+        traverse(self.data)
+        return paths

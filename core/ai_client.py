@@ -21,7 +21,7 @@ class AIProvider(ABC):
         self.current_model = config.get("default_model", "")
 
     @abstractmethod
-    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
+    async def chat(self, message: str, system_prompt: Optional[str] = None, timeout: Optional[int] = None) -> str:
         """Envoie un message de chat et retourne la réponse"""
         pass
 
@@ -212,7 +212,7 @@ class OllamaProvider(AIProvider):
         # Utiliser aya comme modèle par défaut avec fallback intelligent
         default_model = config.get("default_model", "aya")
         self.model = default_model
-        self.timeout = config.get("timeout", 30)
+        self.timeout = config.get("timeout", 120)  # Augmenté à 120s pour textes longs
 
     def check_connection(self) -> bool:
         """Vérifie la connexion à Ollama et met à jour le modèle préféré"""
@@ -241,9 +241,19 @@ class OllamaProvider(AIProvider):
             # En cas d'erreur, garder le modèle actuel
             pass
 
-    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
-        """Chat avec Ollama"""
+    async def chat(self, message: str, system_prompt: Optional[str] = None, timeout: Optional[int] = None) -> str:
+        """
+        Chat avec Ollama
+
+        Args:
+            message: Message à envoyer
+            system_prompt: Prompt système optionnel
+            timeout: Timeout en secondes (si None, utilise self.timeout)
+        """
         try:
+            # Utiliser le timeout fourni ou celui par défaut
+            effective_timeout = timeout if timeout is not None else self.timeout
+
             # Préparer les messages
             messages = []
 
@@ -264,7 +274,7 @@ class OllamaProvider(AIProvider):
                 async with session.post(
                     f"{self.host}/api/chat",
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                    timeout=aiohttp.ClientTimeout(total=effective_timeout)
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
@@ -408,7 +418,7 @@ class OpenAIProvider(AIProvider):
         except:
             return False
 
-    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
+    async def chat(self, message: str, system_prompt: Optional[str] = None, timeout: Optional[int] = None) -> str:
         """Chat avec OpenAI"""
         if not self.api_key:
             raise Exception("Clé API OpenAI non configurée")
@@ -527,7 +537,7 @@ class MistralProvider(AIProvider):
         except:
             return False
 
-    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
+    async def chat(self, message: str, system_prompt: Optional[str] = None, timeout: Optional[int] = None) -> str:
         """Chat avec Mistral"""
         if not self.api_key:
             raise Exception("Clé API Mistral non configurée")
@@ -611,7 +621,7 @@ class AnthropicProvider(AIProvider):
         except:
             return False
 
-    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
+    async def chat(self, message: str, system_prompt: Optional[str] = None, timeout: Optional[int] = None) -> str:
         """Chat avec Anthropic"""
         if not self.api_key:
             raise Exception("Clé API Anthropic non configurée")
@@ -748,12 +758,12 @@ class AIClient:
             return self.current_provider.check_connection()
         return False
 
-    async def chat(self, message: str, system_prompt: Optional[str] = None) -> str:
+    async def chat(self, message: str, system_prompt: Optional[str] = None, timeout: Optional[int] = None) -> str:
         """Envoie un message de chat au provider actuel"""
         if not self.current_provider:
             raise Exception("Aucun provider AI configuré")
 
-        return await self.current_provider.chat(message, system_prompt)
+        return await self.current_provider.chat(message, system_prompt, timeout)
 
     async def execute_internal_command(self, command: str) -> str:
         """Exécute une commande interne sur le provider actuel"""
