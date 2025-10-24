@@ -3,7 +3,7 @@
     "version": "2.0",
     "original_file": "dhtest.json",
     "created": "2025-10-13T16:38:16.059627",
-    "last_modified": "2025-10-16T16:31:55.926751"
+    "last_modified": "2025-10-24T14:22:01.142536"
   },
   "label": {
     "ori": "adversaires",
@@ -510,9 +510,12 @@
       "Arm1Nom": {
         "ori": "Shocking Bite",
         "fr": {
-          "text": "",
-          "history": [],
-          "valid": false
+          "text": "Morsure électrique",
+          "history": [
+            "Bite choquante",
+            "Bite choquant"
+          ],
+          "valid": true
         },
         "es": {
           "text": "",
@@ -582,9 +585,11 @@
       "Arm2Nom": {
         "ori": "Fist",
         "fr": {
-          "text": "",
-          "history": [],
-          "valid": false
+          "text": "Coup",
+          "history": [
+            "Poing"
+          ],
+          "valid": true
         },
         "es": {
           "text": "",
@@ -656,9 +661,11 @@
       "name": {
         "ori": "Vault Guardian Gaoler",
         "fr": {
-          "text": "Gardien de la Vaulthalle",
-          "history": [],
-          "valid": false
+          "text": "Gardien de coffre-fort",
+          "history": [
+            "Gardien de la Vaulthalle"
+          ],
+          "valid": true
         },
         "es": {
           "text": "",
@@ -710,9 +717,13 @@
       "Arm1Nom": {
         "ori": "Body Bash",
         "fr": {
-          "text": "",
-          "history": [],
-          "valid": false
+          "text": "Coup de plein fouet",
+          "history": [
+            "Coup ",
+            "Cassonne-moi les boules.",
+            "Casse-moi les couilles"
+          ],
+          "valid": true
         },
         "es": {
           "text": "",
@@ -782,9 +793,9 @@
       "Arm2Nom": {
         "ori": "Fist",
         "fr": {
-          "text": "",
+          "text": "Poing",
           "history": [],
-          "valid": false
+          "valid": true
         },
         "es": {
           "text": "",
@@ -892,9 +903,20 @@
       "description": {
         "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A burly vegetable-person with grasping vines.</p><h4>MOTIVES &amp; TACTICS</h4><p>Ambush, grab, protect, pummel</p><hr /><h1>EXPERIENCE</h1><p>Huge +3</p><hr /><h1>FEATURES</h1><ul><li>Ground Slam - Action: Slam the ground, knocking all targets within Very Close range back to Far range. Each target knocked back this way must mark a Stress.</li><li>Grab and Drag - Action: Make an attack against a target within Close range. On a success, spend a Fear to pull them into Melee range, deal 1d6+2 physical damage, and Restrain them until the Defender takes Severe damage.</li></ul>",
         "fr": {
-          "text": "",
-          "history": [],
-          "valid": false
+          "text": "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un humanoïd de forme végétale robuste aux membres en vignes griffues.</p><h4>MOTIVES & TACTIQUES</h4><p>Embuscade, saisir, protéger, écraser</p><hr /><h1>EXPERIENCE</h1><p>Grand +3</p><hr /><h1>caractéristiques</h1><ul><li>Frappe du Sol - Action : Frapper le sol, envoyant tout objectif à très courte portée en arrière vers la portée lointaine. Chaque objectif ainsi renvoyé doit marquer un Stress.</li><li>Aggriper et enserer - Action : Effectuer une attaque contre un objectif à courte portée. En cas de succès, dépenser une Peur pour les tirer dans la portée du corps-à-corps, leur infliger 1d6+2 dégâts physiques et les retenir jusqu'à ce que le défenseur subisse des dégâts graves.</li></ul>",
+          "history": [
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un humanoïd de forme végétale robuste aux membres en vignes griffues.</p><h4>MOTIVES & TACTIQUES</h4><p>Embuscade, saisir, protéger, écraser</p><hr /><h1>EXPERIENCE</h1><p>Grand +3</p><hr /><h1>caractéristiques</h1><ul><li>Frappe du Sol - Action : Frapper le sol, envoyant tout objectif à très courte portée en arrière vers la portée lointaine. Chaque objectif ainsi renvoyé doit marquer un Stress.</li><li>Grab and Drag - Action : Effectuer une attaque contre un objectif à courte portée. En cas de succès, dépenser une Peur pour les tirer dans la portée du corps-à-corps, leur infliger 1d6+2 dégâts physiques et les retenir jusqu'à ce que le défenseur subisse des dégâts graves.</li></ul>",
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un humanoïd de forme végétale robuste aux membres en vignes griffues.</p><h4>MOTIVES & TACTIQUES</h4><p>Embuscade, saisir, protéger, écraser</p><hr /><h1>EXPERIENCE</h1><p>Grand +3</p><hr /><h1>caractéristiques</h1><ul><li>Frappe du Sol - Action : Frapper le sol, envoyant tout objectif à très courte portée en arrière vers la portée lointaine. Chaque objectif ainsi renvoyé doit marquer un Stress.</li><li>Grab and Drag - Action : Effectuer une attaque contre un objectif à courte portée. En cas de succès, dépenser une Peur pour les tirer dans la portée du corps-à-corps, leur infliger 1d6+2 dégâts physiques et les retenir jusqu'à ce que le défenseur subisse des dégâts graves.</li></ul>",
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un humanoïd de forme végétale robuste aux membres en vignes griffues.</p><h4>MOTIVES & TACTIQUES</h4><p>Embuscade, saisir, protéger, écraser</p><hr /><h1>EXPERIENCE</h1><p>Grand +3</p><hr /><h1>caractéristiques</h1><ul><li>Ground Slam - Action : Frapper le sol, envoyant tout objectif à très courte portée en arrière vers la portée lointaine. Chaque objectif ainsi renvoyé doit marquer un Stress.</li><li>Grab and Drag - Action : Effectuer une attaque contre un objectif à courte portée. En cas de succès, dépenser une Peur pour les tirer dans la portée du corps-à-corps, leur infliger 1d6+2 dégâts physiques et les retenir jusqu'à ce que le défenseur subisse des dégâts graves.</li></ul>",
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un humanoïd de forme végétale robuste aux membres en vignes griffues.</p><h4>MOTIVES & TACTIQUES</h4><p>Embuscade, saisir, protéger, écraser</p><hr /><h1>EXPERIENCE</h1><p>Gros +3</p><hr /><h1>caractéristiques</h1><ul><li>Ground Slam - Action : Frapper le sol, envoyant tout objectif à très courte portée en arrière vers la portée lointaine. Chaque objectif ainsi renvoyé doit marquer un Stress.</li><li>Grab and Drag - Action : Effectuer une attaque contre un objectif à courte portée. En cas de succès, dépenser une Peur pour les tirer dans la portée du corps-à-corps, leur infliger 1d6+2 dégâts physiques et les retenir jusqu'à ce que le défenseur subisse des dégâts graves.</li></ul>",
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Une personne végétale robuste aux vignes griffues.</p><h4>MOTIVES & TACTIQUES</h4><p>Embuscade, saisir, protéger, écraser</p><hr /><h1>EXPERIENCE</h1><p>Huge +3</p><hr /><h1>caractéristiques</h1><ul><li>Ground Slam - Action : Frapper le sol, envoyant tout objectif à très courte portée en arrière vers la portée lointaine. Chaque objectif ainsi renvoyé doit marquer un Stress.</li><li>Grab and Drag - Action : Effectuer une attaque contre un objectif à courte portée. En cas de succès, dépenser une Peur pour les tirer dans la portée du corps-à-corps, leur infliger 1d6+2 dégâts physiques et les retenir jusqu'à ce que le défenseur subisse des dégâts graves.</li></ul>",
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Une personne végétale robuste aux vignes griffues.</p><h4>MOTIVES & TACTIQUES</h4><p>Embuscade, saisir, protéger, écraser</p><hr /><h1>EXPERIENCE</h1><p>Huge +3</p><hr /><h1>caractéristiques</h1><ul><li>Ground Slam - Action : Frapper le sol, envoyant tout objectif à très courte portée en arrière vers la portée lointaine. Chaque objectif ainsi renvoyé doit marquer un Stress.</li><li>Grab and Drag - Action : Effectuer une attaque contre un objectif à courte portée. En cas de succès, dépenser une Peur pour les tirer dans la portée du corps-à-corps, leur infliger 1d6+2 dégâts physiques et les retenir jusqu'à ce que le défenseur subisse des dégâts graves.</li></ul>",
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Une personne végétale robuste aux vignes griffues.</p><h4>MOTIVES & TACTIQUES</h4><p>Embuscade, saisir, protéger, écraser</p><hr /><h1>EXPERIENCE</h1><p>Huge +3</p><hr /><h1>caractéristiques</h1><ul><li>Ground Slam - Action : Frapper le sol, envoyant tout objectif à très courte portée en arrière vers la portée lointaine. Chaque objectif ainsi renvoyé doit marquer un Stress.</li><li>Grab and Drag - Action : Effectuer une attaque contre un objectif à courte portée. En cas de succès, dépenser une Peur pour les tirer dans la portée du corps-à-corps, leur infliger 1d6+2 dégâts physiques et les retenir jusqu'à ce que le défenseur subisse des dégâts graves.</li></ul>",
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Une personne végétale robuste aux vignes griffues.</p><h4>MOTIVES & TACTIQUES</h4><p>Ambush, saisir, protéger, écraser</p><hr /><h1>EXPERIENCE</h1><p>Huge +3</p><hr /><h1>caractéristiques</h1><ul><li>Ground Slam - Action : Frapper le sol, envoyant tout objectif à très courte portée en arrière vers la portée lointaine. Chaque objectif ainsi renvoyé doit marquer un Stress.</li><li>Grab and Drag - Action : Effectuer une attaque contre un objectif à courte portée. En cas de succès, dépenser une Peur pour les tirer dans la portée du corps-à-corps, leur infliger 1d6+2 dégâts physiques et les retenir jusqu'à ce que le défenseur subisse des dégâts graves.</li></ul>",
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Une personne végétale robuste aux vignes griffues.</p><h4>MOTIVES & TACTIQUES</h4><p>Ambush, saisir, protéger, écraser</p><hr /><h1>EXPERIENCE</h1><p>Huge +3</p><hr /><h1>caractéristiques</h1><ul><li>Ground Slam - Action : Frapper le sol, envoyant tout objectif à très courte portée en arrière vers la portée lointaine. Chaque objectif ainsi renvoyé doit marquer un Stress.</li><li>Grab and Drag - Action : Effectuer une attaque contre un objectif à courte portée. En cas de succès, dépenser une Peur pour les tirer dans la portée du corps-à-corps, leur infliger 1d6+2 dégâts physiques et les retenir jusqu'à ce que le défenseur subisse des dégâts graves.</li></ul>",
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Une personne végétale robuste aux vignes griffues.</p><h4>MOTIVES & TACTIQUES</h4><p>Voici une version améliorée : \n\n\"Ambush, saisir, protéger, écraser\" \n\nCette traduction reste assez littérale tout en ajoutant une touche de style pour rendre la phrase plus intéressante et dynamique.</p><hr /><h1>EXPERIENCE</h1><p>Huge +3</p><hr /><h1>caractéristiques</h1><ul><li>Ground Slam - Action : Frapper le sol, envoyant tout objectif à très courte portée en arrière vers la portée lointaine. Chaque objectif ainsi renvoyé doit marquer un Stress.</li><li>Grab and Drag - Action : Effectuer une attaque contre un objectif à courte portée. En cas de succès, dépenser une Peur pour les tirer dans la portée du corps-à-corps, leur infliger 1d6+2 dégâts physiques et les retenir jusqu'à ce que le défenseur subisse des dégâts graves.</li></ul>"
+          ],
+          "valid": true
         },
         "es": {
           "text": "",
@@ -910,9 +932,11 @@
       "Arm1Nom": {
         "ori": "Vines",
         "fr": {
-          "text": "",
-          "history": [],
-          "valid": false
+          "text": "Fouet de vignes",
+          "history": [
+            "Les vignes"
+          ],
+          "valid": true
         },
         "es": {
           "text": "",
@@ -982,9 +1006,9 @@
       "Arm2Nom": {
         "ori": "Fist",
         "fr": {
-          "text": "",
+          "text": "Poing",
           "history": [],
-          "valid": false
+          "valid": true
         },
         "es": {
           "text": "",
@@ -1092,9 +1116,13 @@
       "description": {
         "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A glacier-blue dragon with four powerful limbs and frost-tinged wings.</p><h4>MOTIVES &amp; TACTICS</h4><p>Avalanche, defend lair, fly, freeze, defend what is mine, maul</p><hr /><h1>EXPERIENCE</h1><p>Protect What Is Mine +3</p><hr /><h1>FEATURES</h1><ul><li>Relentless (3) - Passive: The Dragon can be spotlighted up to three times per GM turn. Spend Fear as usual to spotlight them.</li><li>Rend and Crush - Passive: If a target damaged by the Dragon doesn’t mark an Armor Slot to reduce the damage, they must mark a Stress.</li><li>No Hope - Passive: When a PC rolls with Fear while within Far range of the Dragon, they lose a Hope.</li><li>Blizzard Breath - Action: Spend 2 Fear to release an icy whorl in front of the Dragon within Close range. All targets in this area must make an Agility Reaction Roll. Targets who fail take 4d6+5 magic damage and are Restrained by ice until they break free with a successful Strength Roll. Targets who succeed must mark 2 Stress or take half damage.</li><li>Avalanche - Action: Spend a Fear to have the Dragon unleash a huge downfall of snow and ice, covering all other creatures within Far range. All targets within this area must succeed on an Instinct Reaction Roll or be buried in snow and rocks, becoming Vulnerable until they dig themselves out from the debris. For each PC that fails the reaction roll, you gain a Fear.</li><li>Frozen Scales - Reaction: When a creature makes a successful attack against the Dragon from within Very Close range, they must mark a Stress and become Chilled until their next rest or they clear a Stress. While they are Chilled, they have disadvantage on attack rolls.</li><li>Momentum - Reaction: When the Dragon makes a successful attack against a PC, you gain a Fear.</li></ul>",
         "fr": {
-          "text": "",
-          "history": [],
-          "valid": false
+          "text": "<h1>Détails</h1>\n<h4>DESCRIPTION</h4>\n<p>Un dragon bleu glacier aux quatre membres puissants et aux ailes givrées.</p>\n<h4>MOTS CLES & TACTIQUES</h4>\n<p>Avalanche, défendre la tanière, voler, geler, défendre ce qui est mien, déchirer</p>\n<hr />\n<h1>EXPERIENCE</h1>\n<p>Protéger ce qui est mien +3</p>\n<hr />\n<h1>CARACTÉRISTIQUES</h1>\n<ul>\n<li>Sans répit. (3) - Passif : Le dragon peut être mis en lumière jusqu'à trois fois par tour du MJ. dépensez Peur comme d'habitude pour les mettre en évidence.</li>\n<li>Esquiver ou encaisser - Passif : Si une cible endommagée par le dragon ne marque pas un créneau de armure pour réduire les dégâts, elle doit marquer un Stress.</li>\n<li>Sans espoir - Passif : Lorsque un PC fait un jet de Peur tout en étant à très grande distance du dragon, il perd un Espoir.</li>\n<li>Souffle de blizzard - Action : dépensez 2 Peur pour libérer une tourbillon de glace devant le dragon à portée de près. Toutes les cibles dans cette zone doivent effectuer un jet de réaction d'Agilité. Les cibles qui échouent prennent 4d6+5 dégâts magiques et sont immobilisées par la glace jusqu'à ce qu'elles se libèrent avec un jet réussi de Force. Les cibles qui réussissent doivent marquer 2 Stress ou prendre la moitié des dégâts.</li>\n<li>Avalanche - Action : dépensez une Peur pour que le dragon déchaîne une énorme chute de neige et de glace, recouvrant toutes les créatures à très grande distance. Toutes les cibles dans cette zone doivent réussir un jet de réaction d'Instinct ou être ensevelies sous la neige et les roches, devenant Vulnérables jusqu'à ce qu'elles s'extraient des débris. Pour chaque PC qui échoue au jet de réaction, vous gagnez une Peur.</li>\n<li>Écailles congelantes - Réaction : lorsqu'une créature porte un coup réussi contre le dragon à portée de près très proche, elle doit marquer un Stress et devenir engourdi jusqu'à son prochain repos ou jusqu'à ce qu'elle prenne un Espoir. Pendant qu'ils sont engourdis, ils ont désavantage sur leurs jets d'attaque.</li>\n<li>Momentum - Réaction : lorsque le dragon porte un coup réussi contre un PC, vous gagnez une Peur.</li>\n</ul>",
+          "history": [
+            "<h1>Détails</h1>\n<h4>DESCRIPTION</h4>\n<p>Un dragon bleu glacier aux quatre membres puissants et aux ailes givrées.</p>\n<h4>MOTS CLES & TACTIQUES</h4>\n<p>Avalanche, défendre la tanière, voler, geler, défendre ce qui est mien, déchirer</p>\n<hr />\n<h1>EXPERIENCE</h1>\n<p>Protéger ce qui est mien +3</p>\n<hr />\n<h1>CARACTÉRISTIQUES</h1>\n<ul>\n<li>Sans répit. (3) - Passif : Le dragon peut être mis en lumière jusqu'à trois fois par tour du MJ. dépensez Peur comme d'habitude pour les mettre en évidence.</li>\n<li>Rendre et écraser - Passif : Si une cible endommagée par le dragon ne marque pas un créneau de armure pour réduire les dégâts, elle doit marquer un Stress.</li>\n<li>Pas d'espoir - Passif : Lorsque un PC fait un jet de Peur tout en étant à très grande distance du dragon, il perd un Espoir.</li>\n<li>Soufflé de blizzard - Action : dépensez 2 Peur pour libérer une tourbillon de glace devant le dragon à portée de près. Toutes les cibles dans cette zone doivent effectuer un jet de réaction d'Agilité. Les cibles qui échouent prennent 4d6+5 dégâts magiques et sont immobilisées par la glace jusqu'à ce qu'elles se libèrent avec un jet réussi de Force. Les cibles qui réussissent doivent marquer 2 Stress ou prendre la moitié des dégâts.</li>\n<li>Avalanche - Action : dépensez une Peur pour que le dragon déchaîne une énorme chute de neige et de glace, recouvrant toutes les créatures à très grande distance. Toutes les cibles dans cette zone doivent réussir un jet de réaction d'Instinct ou être ensevelies sous la neige et les roches, devenant Vulnérables jusqu'à ce qu'elles s'extraient des débris. Pour chaque PC qui échoue au jet de réaction, vous gagnez une Peur.</li>\n<li>Écailles gelées - Réaction : lorsqu'une créature porte un coup réussi contre le dragon à portée de près très proche, elle doit marquer un Stress et devenir engourdi jusqu'à son prochain repos ou jusqu'à ce qu'elle prenne un Espoir. Pendant qu'ils sont engourdis, ils ont désavantage sur leurs jets d'attaque.</li>\n<li>Momentum - Réaction : lorsque le dragon porte un coup réussi contre un PC, vous gagnez une Peur.</li>\n</ul>",
+            "<h1>Détails</h1>\n<h4>DESCRIPTION</h4>\n<p>Un dragon bleu glacier aux quatre membres puissants et aux ailes givrées.</p>\n<h4>MOTS CLES & TACTIQUES</h4>\n<p>Avalanche, défendre la tanière, voler, geler, défendre ce qui est mien, déchirer</p>\n<hr />\n<h1>EXPERIENCE</h1>\n<p>Protéger ce qui est mien +3</p>\n<hr />\n<h1>CARACTÉRISTIQUES</h1>\n<ul>\n<li>Sans répit. (3) - Passif : Le dragon peut être mis en lumière jusqu'à trois fois par tour du MJ. dépensez Peur comme d'habitude pour les mettre en évidence.</li>\n<li>Rendre et écraser - Passif : Si une cible endommagée par le dragon ne marque pas un créneau de armure pour réduire les dégâts, elle doit marquer un Stress.</li>\n<li>Pas d'espoir - Passif : Lorsque un PC fait un jet de Peur tout en étant à très grande distance du dragon, il perd un Espoir.</li>\n<li>Soufflé de blizzard - Action : dépensez 2 Peur pour libérer une tourbillon de glace devant le dragon à portée de près. Toutes les cibles dans cette zone doivent effectuer un jet de réaction d'Agilité. Les cibles qui échouent prennent 4d6+5 dégâts magiques et sont immobilisées par la glace jusqu'à ce qu'elles se libèrent avec un jet réussi de Force. Les cibles qui réussissent doivent marquer 2 Stress ou prendre la moitié des dégâts.</li>\n<li>Avalanche - Action : dépensez une Peur pour que le dragon déchaîne une énorme chute de neige et de glace, recouvrant toutes les créatures à très grande distance. Toutes les cibles dans cette zone doivent réussir un jet de réaction d'Instinct ou être ensevelies sous la neige et les roches, devenant Vulnérables jusqu'à ce qu'elles s'extraient des débris. Pour chaque PC qui échoue au jet de réaction, vous gagnez une Peur.</li>\n<li>Écailles gelées - Réaction : lorsqu'une créature porte un coup réussi contre le dragon à portée de près très proche, elle doit marquer un Stress et devenir engourdi jusqu'à son prochain repos ou jusqu'à ce qu'elle prenne un Espoir. Pendant qu'ils sont engourdis, ils ont désavantage sur leurs jets d'attaque.</li>\n<li>Momentum - Réaction : lorsque le dragon porte un coup réussi contre un PC, vous gagnez une Peur.</li>\n</ul>",
+            "<h1>Détails</h1>\n<h4>DESCRIPTION</h4>\n<p>Un dragon bleu glacier aux quatre membres puissants et aux ailes givrées.</p>\n<h4>MOTS & TACTIQUES</h4>\n<p>Avalanche, défendre la tanière, voler, geler, défendre ce qui est mien, déchirer</p>\n<hr />\n<h1>EXPERIENCE</h1>\n<p>Protéger ce qui est mien +3</p>\n<hr />\n<h1>CARACTÉRISTIQUES</h1>\n<ul>\n<li>Sans repos (3) - Passif : Le dragon peut être mis en lumière jusqu'à trois fois par tour du MJ. dépensez Peur comme d'habitude pour les mettre en évidence.</li>\n<li>Rendre et écraser - Passif : Si une cible endommagée par le dragon ne marque pas un créneau de armure pour réduire les dégâts, elle doit marquer un Stress.</li>\n<li>Pas d'espoir - Passif : Lorsque un PC fait un jet de Peur tout en étant à très grande distance du dragon, il perd un Espoir.</li>\n<li>Soufflé de blizzard - Action : dépensez 2 Peur pour libérer une tourbillon de glace devant le dragon à portée de près. Toutes les cibles dans cette zone doivent effectuer un jet de réaction d'Agilité. Les cibles qui échouent prennent 4d6+5 dégâts magiques et sont immobilisées par la glace jusqu'à ce qu'elles se libèrent avec un jet réussi de Force. Les cibles qui réussissent doivent marquer 2 Stress ou prendre la moitié des dégâts.</li>\n<li>Avalanche - Action : dépensez une Peur pour que le dragon déchaîne une énorme chute de neige et de glace, recouvrant toutes les créatures à très grande distance. Toutes les cibles dans cette zone doivent réussir un jet de réaction d'Instinct ou être ensevelies sous la neige et les roches, devenant Vulnérables jusqu'à ce qu'elles s'extraient des débris. Pour chaque PC qui échoue au jet de réaction, vous gagnez une Peur.</li>\n<li>Écailles gelées - Réaction : lorsqu'une créature porte un coup réussi contre le dragon à portée de près très proche, elle doit marquer un Stress et devenir engourdi jusqu'à son prochain repos ou jusqu'à ce qu'elle prenne un Espoir. Pendant qu'ils sont engourdis, ils ont désavantage sur leurs jets d'attaque.</li>\n<li>Momentum - Réaction : lorsque le dragon porte un coup réussi contre un PC, vous gagnez une Peur.</li>\n</ul>"
+          ],
+          "valid": true
         },
         "es": {
           "text": "",
@@ -1110,9 +1138,12 @@
       "Arm1Nom": {
         "ori": "Bite and Cros",
         "fr": {
-          "text": "",
-          "history": [],
-          "valid": false
+          "text": "Morsures et cros",
+          "history": [
+            "Morsures et cros",
+            "Mordre et croiser"
+          ],
+          "valid": true
         },
         "es": {
           "text": "",
@@ -1256,7 +1287,7 @@
       "name": {
         "ori": "Spy",
         "fr": {
-          "text": "",
+          "text": "espion",
           "history": [],
           "valid": false
         },
@@ -1292,8 +1323,10 @@
       "description": {
         "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A skilled espionage agent with a knack for being in the right place to overhear secrets.</p><h4>MOTIVES &amp; TACTICS</h4><p>Cut and run, disguise appearance, eavesdrop</p><hr /><h1>EXPERIENCE</h1><p>Espionage +3</p><hr /><h1>FEATURES</h1><ul><li>Gathering Secrets - Action: Spend a Fear to describe how the Spy knows a secret about a PC in the scene.</li><li>Fly on the Wall - Reaction: When a PC or group is discussing something sensitive, you can mark a Stress to reveal that the Spy is present in the scene, observing them. If the Spy escapes the scene to report their findings, you gain 1d4 Fear.</li></ul>",
         "fr": {
-          "text": "",
-          "history": [],
+          "text": "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un agent de renseignement habile, qui a le don d'être au bon endroit pour espionner des secrets.</p><h4>MOTIVATIONS & TACTIQUES</h4><p>Faire une fuite rapide, se déguiser, écouter en cachette</p><hr /><h1>EXPÉRIENCE</h1><p>Espionnage +3</p><hr /><h1>PERSONNALITÉ</h1><ul><li>Collecter des Secrets - Action : Dépenser une Peur pour décrire comment l'Espion connaît un secret sur un PJ de la scène.</li><li>Vol de l'Envolée - Réaction : Quand un PJ ou un groupe discute de quelque chose de sensible, vous pouvez marquer un Stress pour révéler que l'Espion est présent dans la scène, les observant. Si l'Espion s'enfuit de la scène pour rapporter ses découvertes, vous gagnez 1d4 Peur.</li></ul>",
+          "history": [
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un agent de renseignement habile, qui a le don d'être au bon endroit pour espionner des secrets.</p><h4>MOTIVES & TACTIQUES</h4><p>Faire une fuite rapide, se déguiser, écouter en cachette</p><hr /><h1>EXPÉRIENCE</h1><p>Renseignement +3</p><hr /><h1>PERSONNALITÉ</h1><ul><li>Collecter des Secrets - Action : Dépenser une Peur pour décrire comment l'Espion connaît un secret sur un PJ de la scène.</li><li>Vol de l'Envolée - Réaction : Quand un PJ ou un groupe discute de quelque chose de sensible, vous pouvez marquer un Stress pour révéler que l'Espion est présent dans la scène, les observant. Si l'Espion s'enfuit de la scène pour rapporter ses découvertes, vous gagnez 1d4 Peur.</li></ul>"
+          ],
           "valid": false
         },
         "es": {

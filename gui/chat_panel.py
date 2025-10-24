@@ -24,12 +24,13 @@ class ChatPanel(ttk.Frame):
     - Coloration par type de message
     """
 
-    def __init__(self, parent):
+    def __init__(self, parent, on_user_message: Optional[callable] = None):
         super().__init__(parent)
 
         self.current_context = None
         self.is_visible = True
         self.paned_window = None  # Référence au PanedWindow parent
+        self.on_user_message = on_user_message  # Callback quand l'utilisateur envoie un message
 
         self._create_widgets()
 
@@ -84,6 +85,27 @@ class ChatPanel(ttk.Frame):
         self.text_widget.tag_config("timestamp", foreground="gray", font=("Arial", 7))
         self.text_widget.tag_config("magic", foreground="purple", font=("Arial", 9, "bold"))
 
+        # Séparateur
+        ttk.Separator(self, orient="horizontal").pack(fill="x")
+
+        # Zone de saisie pour dialoguer avec l'IA
+        input_frame = ttk.Frame(self)
+        input_frame.pack(fill="x", padx=5, pady=5)
+
+        # Label
+        ttk.Label(input_frame, text="💬", font=("Arial", 12)).pack(side="left", padx=(0, 5))
+
+        # Champ de saisie
+        self.input_entry = ttk.Entry(input_frame, font=("Arial", 9))
+        self.input_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.input_entry.bind("<Return>", self._on_send_message)
+        self.input_entry.bind("<Shift-Return>", lambda e: None)  # Permettre Shift+Enter sans envoyer
+
+        # Bouton envoyer
+        send_btn = tk.Button(input_frame, text="Envoyer", command=self._on_send_message,
+                            bg="#4CAF50", fg="white", relief="flat", padx=10)
+        send_btn.pack(side="left")
+
     def set_context(self, path: str):
         """
         Change le contexte du chat.
@@ -125,22 +147,58 @@ class ChatPanel(ttk.Frame):
         self.text_widget.config(state="disabled")
         self.text_widget.see("end")
 
-    def add_magic_action(self, lang: str, action: str, result: str, validated: bool):
+    def add_magic_action(self, lang: str, action: str, sent_text: str,
+                        returned_text: str, kept_text: str, validated: bool,
+                        full_prompt: str = None):
         """
         Ajoute une action de baguette magique au chat.
 
         Args:
             lang: Code langue
-            action: "translate" ou "improve"
-            result: Texte résultant
+            action: "translate", "improve", "translate_selection", "improve_selection"
+            sent_text: Texte envoyé à l'IA (sélection ou texte complet)
+            returned_text: Réponse brute de l'IA
+            kept_text: Texte finalement retenu/inséré
             validated: État de validation
+            full_prompt: Prompt complet envoyé à l'IA (optionnel, pour mode debug)
         """
-        action_text = "traduire" if action == "translate" else "améliorer"
+        # Déterminer le type d'action
+        if "selection" in action:
+            action_base = "traduire" if "translate" in action else "améliorer"
+            action_text = f"{action_base} (sélection)"
+        else:
+            action_text = "traduire" if "translate" in action else "améliorer"
+
         tag = f"🪄 {lang.upper()}: {action_text}"
 
-        status = "✓ Validé" if validated else "❌ Non validé"
-        message = f'"{result}"\n   [{status}]'
+        # Construire le message détaillé
+        message_parts = []
 
+        # Texte envoyé
+        sent_preview = sent_text[:100] + "..." if len(sent_text) > 100 else sent_text
+        message_parts.append(f"Envoyé: \"{sent_preview}\"")
+
+        # Texte retourné (réponse brute de l'IA)
+        returned_preview = returned_text[:100] + "..." if len(returned_text) > 100 else returned_text
+        message_parts.append(f"Retourné: \"{returned_preview}\"")
+
+        # Texte retenu (ce qui est inséré)
+        kept_preview = kept_text[:100] + "..." if len(kept_text) > 100 else kept_text
+        message_parts.append(f"Retenu: \"{kept_preview}\"")
+
+        # Statistiques
+        message_parts.append(f"Longueur: envoyé={len(sent_text)}, retourné={len(returned_text)}, retenu={len(kept_text)}")
+
+        # Prompt complet si fourni (mode debug)
+        if full_prompt:
+            prompt_preview = full_prompt[:200] + "..." if len(full_prompt) > 200 else full_prompt
+            message_parts.append(f"[DEBUG] Prompt complet:\n{prompt_preview}")
+
+        # Status
+        status = "✓ Validé" if validated else "❌ Non validé"
+        message_parts.append(f"[{status}]")
+
+        message = "\n   ".join(message_parts)
         self.add_message("assistant", message, tag)
 
     def add_validation_change(self, lang: str, validated: bool):
@@ -194,6 +252,28 @@ class ChatPanel(ttk.Frame):
 
         # Ajouter un message de confirmation
         self.add_message("system", "Historique effacé")
+
+    def _on_send_message(self, event=None):
+        """
+        Gère l'envoi d'un message utilisateur.
+
+        Args:
+            event: Événement Tkinter (optionnel)
+        """
+        message = self.input_entry.get().strip()
+
+        if not message:
+            return
+
+        # Afficher le message de l'utilisateur dans le chat
+        self.add_message("user", message)
+
+        # Effacer le champ de saisie
+        self.input_entry.delete(0, "end")
+
+        # Appeler le callback si défini
+        if self.on_user_message:
+            self.on_user_message(message)
 
     def toggle_visibility(self):
         """Affiche/cache le contenu du chat et redimensionne le pane."""

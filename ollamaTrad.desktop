@@ -1,0 +1,29 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=OllamaTrad
+Comment=Intelligent JSON Translation System with AI
+Comment[fr]=Système de traduction JSON intelligent avec IA
+Exec=/bin/bash -c "cd $(dirname %k) && ./ollamaTrad.sh"
+Path=/mnt/foundryvtt/FoundryOG/python/ollamaFic
+Icon=/mnt/foundryvtt/FoundryOG/python/ollamaFic/icon.png
+Terminal=false
+Categories=Development;Utility;Translation;
+Keywords=translation;json;ai;ollama;openai;
+StartupNotify=true
+MimeType=application/json;
+
+# Actions supplémentaires
+Actions=CLI;Options;
+
+[Desktop Action CLI]
+Name=Launch CLI Mode
+Name[fr]=Lancer en mode CLI
+Exec=/bin/bash -c "cd /mnt/foundryvtt/FoundryOG/python/ollamaFic && python3 ollamaTrad.py"
+Terminal=true
+
+[Desktop Action Options]
+Name=Open Configuration
+Name[fr]=Ouvrir la Configuration
+Exec=/bin/bash -c "cd /mnt/foundryvtt/FoundryOG/python/ollamaFic && python3 -c 'import tkinter as tk; from gui.options_dialog_v3 import OptionsDialogV3; root = tk.Tk(); root.withdraw(); OptionsDialogV3(root); root.mainloop()'"
+Terminal=false

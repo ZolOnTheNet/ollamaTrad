@@ -9,20 +9,33 @@
     "ru": "Русский",
     "ja": "日本語",
     "zh": "中文",
-    "ar": "العربية"
+    "ar": "العربية",
+    "arm": "armenien"
   },
   "target_languages": [
     "fr",
-    "en"
+    "en",
+    "de"
   ],
   "visible_languages": [
-    "fr",
-    "en"
+    "fr"
   ],
   "prompts": {
     "translate": "Traduis \"{text}\" en {lang}. Réponds uniquement avec la traduction, sans explication.",
     "translate_html": "Traduis le texte suivant en {lang}.\nIMPORTANT: Le texte contient du code HTML. Tu DOIS préserver TOUTES les balises HTML exactement comme elles sont.\nNe traduis QUE le texte entre les balises, PAS les balises elles-mêmes.\n\nTexte à traduire:\n{text}\n\nRéponds uniquement avec la traduction, en préservant exactement toutes les balises HTML.",
     "improve": "Améliore cette traduction {lang}:\nTexte original: \"{original}\"\nTraduction actuelle: \"{current}\"\nContexte: {context}\n\nCorrige l'orthographe, la grammaire et rends la phrase plus naturelle.\nRéponds uniquement avec la traduction améliorée, sans explication.",
     "improve_html": "Améliore cette traduction {lang}.\nIMPORTANT: Le texte contient du code HTML. Tu DOIS préserver TOUTES les balises HTML exactement comme elles sont.\n\nTexte original: {original}\nTraduction actuelle: {current}\nContexte: {context}\n\nCorrige l'orthographe, la grammaire et rends la phrase plus naturelle.\nRéponds uniquement avec la traduction améliorée, en préservant exactement toutes les balises HTML."
+  },
+  "allow_edit_ori": true,
+  "ai_config": {
+    "provider": "ollama",
+    "ollama": {
+      "host": "http://localhost:11434",
+      "model": "aya"
+    },
+    "openai": {
+      "api_key": "",
+      "model": "gpt-4"
+    }
   }
 }

@@ -23,6 +23,7 @@ from typing import Optional, Dict
 import asyncio
 import threading
 import json
+import re
 
 # Ajouter le répertoire parent au path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -32,7 +33,7 @@ from core.ai_client import AIClient
 from utils.file_loader import load_file_intelligently
 from gui.translation_form_v2 import TranslationFormV2
 from gui.chat_panel import ChatPanel
-from gui.options_dialog import OptionsDialog
+from gui.options_dialog_v3 import OptionsDialogV3 as OptionsDialog
 
 
 class OllamaFicGUIv2:
@@ -50,6 +51,9 @@ class OllamaFicGUIv2:
 
         # Configuration des traductions
         self.translation_config = self._load_translation_config()
+
+        # Mode debug pour afficher les prompts complets dans le chat
+        self.debug_mode = True  # Mettre à True pour voir les prompts complets
 
         # Mapping des items de l'arbre vers les chemins
         self.tree_item_to_path: Dict[str, str] = {}
@@ -118,7 +122,7 @@ class OllamaFicGUIv2:
         self._create_form_panel(top_paned)
 
         # === BAS: Chat Panel ===
-        self.chat_panel = ChatPanel(self.main_paned)
+        self.chat_panel = ChatPanel(self.main_paned, on_user_message=self._on_user_chat_message)
         self.chat_panel.set_paned_window(self.main_paned)  # Passer la référence
         self.main_paned.add(self.chat_panel, weight=1)
 
@@ -246,20 +250,24 @@ class OllamaFicGUIv2:
             if self.got_manager:
                 self._refresh_after_config_change()
 
-        OptionsDialog(self.root, on_save=on_save)
+        OptionsDialog(self.root, on_save=on_save, ai_client=self.ai_client)
 
     def _refresh_after_config_change(self):
         """Rafraîchit l'affichage après changement de configuration"""
-        # Mettre à jour les langues cibles du manager
-        self.got_manager.target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
+        # Mettre à jour les langues visibles dans le formulaire
+        self.translation_form.visible_languages = self.translation_config.get("visible_languages", [])
 
-        # Recharger l'entrée courante si elle existe
-        if self.current_entry_state["path"]:
-            current_path = self.current_entry_state["path"]
-            self.translation_form.load_entry(current_path)
+        # Mettre à jour les langues cibles du manager (si un fichier est chargé)
+        if self.got_manager:
+            self.got_manager.target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
 
-        # Mettre à jour les couleurs de l'arbre
-        self._refresh_tree_colors()
+            # Recharger l'entrée courante si elle existe
+            if self.current_entry_state["path"]:
+                current_path = self.current_entry_state["path"]
+                self.translation_form.load_entry(current_path)
+
+            # Mettre à jour les couleurs de l'arbre
+            self._update_all_parent_colors()
 
         self.status_label.config(text="✓ Configuration mise à jour")
 
@@ -292,6 +300,10 @@ class OllamaFicGUIv2:
             # Utiliser le chargement intelligent
             self.got_manager, got_path = load_file_intelligently(filepath)
             self.current_file_path = got_path
+
+            # Appliquer les langues configurées par l'utilisateur
+            self.got_manager.target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
+            self.translation_form.visible_languages = self.translation_config.get("visible_languages", [])
 
             # Mettre à jour le formulaire
             self.translation_form.set_got_manager(self.got_manager)
@@ -433,13 +445,15 @@ class OllamaFicGUIv2:
             # Mettre à jour le contexte du chat
             self.chat_panel.set_context(path)
 
-    def _on_magic_click(self, lang: str, action: str):
+    def _on_magic_click(self, lang: str, action: str, selection_data: dict = None, source_lang: str = "auto"):
         """
         Gère le clic sur la baguette magique.
 
         Args:
-            lang: Code langue
-            action: "translate" ou "improve"
+            lang: Code langue cible
+            action: "translate", "improve", "translate_selection" ou "improve_selection"
+            selection_data: Dict avec {"start": index, "end": index, "text": str} ou None
+            source_lang: Langue d'origine ("auto" pour détection automatique)
         """
         # Utiliser current_entry_state systématiquement
         if not self.current_entry_state["path"] or not self.current_entry_state["entry"]:
@@ -451,58 +465,119 @@ class OllamaFicGUIv2:
         captured_entry = self.current_entry_state["entry"]
         captured_lang = lang
         captured_action = action
+        captured_selection = selection_data  # Peut être None
+        captured_source_lang = source_lang
 
         original = captured_entry["ori"]
         current_text = captured_entry[captured_lang]["text"]
 
-        # Calculer un timeout dynamique basé sur la taille du texte
+        # Construire le prompt à partir de la configuration
+        prompts = self.translation_config.get("prompts", {})
+
+        # Gérer les actions de sélection
+        is_selection = captured_action in ("translate_selection", "improve_selection")
+        text_to_translate = captured_selection["text"] if is_selection and captured_selection else None
+
+        # Calculer un timeout dynamique basé sur la taille du texte RÉELLEMENT ENVOYÉ
         # Formule: timeout_base + (nb_caractères / vitesse_estimation) * marge
         # Ollama local avec HTML: ~5 tokens/sec, avec ~4 chars/token = ~20 chars/sec (théorique)
         # En pratique, avec HTML complexe: beaucoup plus lent
         # Utiliser une vitesse très conservatrice de 5 chars/sec et marge x4
-        text_length = len(original) + len(current_text)
+        if is_selection and text_to_translate:
+            # Pour une sélection, calculer sur la taille de la sélection
+            text_length = len(text_to_translate)
+        elif captured_action in ("translate", "translate_selection"):
+            # Pour une traduction, calculer sur la taille de l'original ou de la sélection
+            text_length = len(text_to_translate) if text_to_translate else len(original)
+        else:
+            # Pour une amélioration, calculer sur l'original + texte actuel
+            text_length = len(original) + len(current_text)
+
         estimated_time = text_length / 5  # secondes (vitesse très conservatrice)
         captured_timeout = max(120, int(estimated_time * 4))  # minimum 120s, marge x4
 
-        # Construire le prompt à partir de la configuration
-        prompts = self.translation_config.get("prompts", {})
+        # Construire la phrase de langue source
+        source_lang_phrase = ""
+        if captured_source_lang and captured_source_lang != "auto":
+            # Mapping des codes de langue vers noms complets
+            lang_names = {
+                "en": "anglais", "fr": "français", "es": "espagnol", "de": "allemand",
+                "it": "italien", "pt": "portugais", "ru": "russe", "ja": "japonais",
+                "zh": "chinois", "ko": "coréen", "ar": "arabe"
+            }
+            source_lang_name = lang_names.get(captured_source_lang, captured_source_lang)
+            source_lang_phrase = f" depuis le {source_lang_name}"
 
-        if captured_action == "translate":
+        if captured_action in ("translate", "translate_selection"):
             # Détecter si le texte contient du HTML
-            has_html = '<' in original and '>' in original
+            source_text = text_to_translate if is_selection else original
+            has_html = '<' in source_text and '>' in source_text
 
-            if has_html:
-                # Utiliser le prompt HTML de la config, ou fallback sur le défaut
-                prompt_template = prompts.get("translate_html",
-                    'Traduis le texte suivant en {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\n\n{text}')
-                prompt = prompt_template.format(text=original, lang=captured_lang)
+            if is_selection:
+                # Pour une sélection, être TRÈS strict sur le format de réponse
+                if has_html:
+                    prompt_template = prompts.get("translate_selection_html",
+                        'Traduis UNIQUEMENT ce fragment{source_lang} en {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\nRéponds UNIQUEMENT avec la traduction du fragment, RIEN d\'autre.\n\n{text}')
+                    prompt = prompt_template.format(text=source_text, lang=captured_lang, source_lang=source_lang_phrase)
+                else:
+                    prompt_template = prompts.get("translate_selection",
+                        'Traduis UNIQUEMENT ce fragment{source_lang} en {lang}.\nRéponds UNIQUEMENT avec la traduction du fragment, sans guillemets, sans explication, RIEN d\'autre.\n\n{text}')
+                    prompt = prompt_template.format(text=source_text, lang=captured_lang, source_lang=source_lang_phrase)
             else:
-                # Utiliser le prompt simple de la config, ou fallback
-                prompt_template = prompts.get("translate",
-                    'Traduis "{text}" en {lang}. Réponds uniquement avec la traduction, sans explication.')
-                prompt = prompt_template.format(text=original, lang=captured_lang)
-        else:  # improve
+                # Traduction complète
+                if has_html:
+                    # Utiliser le prompt HTML de la config, ou fallback sur le défaut
+                    prompt_template = prompts.get("translate_html",
+                        'Traduis le texte suivant{source_lang} en {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\n\n{text}')
+                    prompt = prompt_template.format(text=source_text, lang=captured_lang, source_lang=source_lang_phrase)
+                else:
+                    # Utiliser le prompt simple de la config, ou fallback
+                    prompt_template = prompts.get("translate",
+                        'Traduis "{text}"{source_lang} en {lang}. Réponds uniquement avec la traduction, sans explication.')
+                    prompt = prompt_template.format(text=source_text, lang=captured_lang, source_lang=source_lang_phrase)
+        else:  # improve ou improve_selection
             context = self._get_context_for_path(captured_path)
-            has_html = '<' in current_text and '>' in current_text
 
-            if has_html:
-                # Utiliser le prompt amélioration HTML de la config
-                prompt_template = prompts.get("improve_html",
-                    'Améliore cette traduction {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\n\nOriginal: {original}\nActuel: {current}\nContexte: {context}')
-                prompt = prompt_template.format(lang=captured_lang, original=original,
-                                               current=current_text, context=context)
+            if is_selection:
+                # Pour une sélection, on améliore uniquement la partie sélectionnée
+                source_text = text_to_translate
+                # On ne connaît pas l'original de la sélection, donc on ne l'inclut pas
+                has_html = '<' in source_text and '>' in source_text
+
+                if has_html:
+                    prompt_template = prompts.get("improve_selection_html",
+                        'Améliore UNIQUEMENT ce fragment de traduction{source_lang} vers {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\nRéponds UNIQUEMENT avec le fragment amélioré, RIEN d\'autre.\n\nTexte: {current}\nContexte: {context}')
+                    prompt = prompt_template.format(lang=captured_lang, current=source_text, context=context, source_lang=source_lang_phrase)
+                else:
+                    prompt_template = prompts.get("improve_selection",
+                        'Améliore UNIQUEMENT ce fragment de traduction{source_lang} vers {lang}.\nRéponds UNIQUEMENT avec le fragment amélioré, sans guillemets, sans explication, RIEN d\'autre.\n\nTexte: "{current}"\nContexte: {context}')
+                    prompt = prompt_template.format(lang=captured_lang, current=source_text, context=context, source_lang=source_lang_phrase)
             else:
-                # Utiliser le prompt amélioration simple de la config
-                prompt_template = prompts.get("improve",
-                    'Améliore cette traduction {lang}:\nOriginal: "{original}"\nActuel: "{current}"\nContexte: {context}')
-                prompt = prompt_template.format(lang=captured_lang, original=original,
-                                               current=current_text, context=context)
+                # Amélioration complète (comportement normal)
+                has_html = '<' in current_text and '>' in current_text
+
+                if has_html:
+                    # Utiliser le prompt amélioration HTML de la config
+                    prompt_template = prompts.get("improve_html",
+                        'Améliore cette traduction{source_lang} vers {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\n\nOriginal: {original}\nActuel: {current}\nContexte: {context}')
+                    prompt = prompt_template.format(lang=captured_lang, original=original,
+                                                   current=current_text, context=context, source_lang=source_lang_phrase)
+                else:
+                    # Utiliser le prompt amélioration simple de la config
+                    prompt_template = prompts.get("improve",
+                        'Améliore cette traduction{source_lang} vers {lang}:\nOriginal: "{original}"\nActuel: "{current}"\nContexte: {context}')
+                    prompt = prompt_template.format(lang=captured_lang, original=original,
+                                                   current=current_text, context=context, source_lang=source_lang_phrase)
 
         # Logger le début de la traduction dans le chat avec le texte original
-        if captured_action == "translate":
-            self.chat_panel.add_message("system", f"{captured_lang.upper()}: Traduire → \"{original}\" (timeout: {captured_timeout}s)")
+        if captured_action in ("translate", "translate_selection"):
+            source_text = text_to_translate if is_selection else original
+            action_text = "Traduire sélection" if is_selection else "Traduire"
+            self.chat_panel.add_message("system", f"{captured_lang.upper()}: {action_text} → \"{source_text[:100]}{'...' if len(source_text) > 100 else ''}\" (timeout: {captured_timeout}s)")
         else:
-            self.chat_panel.add_message("system", f"{captured_lang.upper()}: Améliorer → \"{current_text}\" (timeout: {captured_timeout}s)")
+            source_text = text_to_translate if is_selection else current_text
+            action_text = "Améliorer sélection" if is_selection else "Améliorer"
+            self.chat_panel.add_message("system", f"{captured_lang.upper()}: {action_text} → \"{source_text[:100]}{'...' if len(source_text) > 100 else ''}\" (timeout: {captured_timeout}s)")
 
         # Lancer l'appel IA dans un thread séparé
         self.status_label.config(text=f"🪄 Traduction {captured_lang} en cours... (max {captured_timeout}s)")
@@ -520,16 +595,59 @@ class OllamaFicGUIv2:
                 asyncio.set_event_loop(loop)
 
                 # Exécuter l'appel asynchrone avec timeout dynamique
-                result = loop.run_until_complete(self.ai_client.chat(prompt, timeout=captured_timeout))
-                result = result.strip().strip('"').strip("'")
+                raw_result = loop.run_until_complete(self.ai_client.chat(prompt, timeout=captured_timeout))
+                # Sauvegarder la réponse brute (retourné par l'IA)
+                returned_by_ai = raw_result.strip()
+
+                result = returned_by_ai.strip('"').strip("'")
+
+                # Pour les sélections, vérifier que le résultat n'est pas trop long
+                if is_selection and text_to_translate:
+                    original_length = len(text_to_translate)
+                    result_length = len(result)
+
+                    # Ratio de tolérance : une traduction peut être jusqu'à 2x plus longue
+                    # (certaines langues comme le français sont plus verbeuses)
+                    max_acceptable_length = original_length * 2.5
+
+                    if result_length > max_acceptable_length:
+                        # Le résultat semble contenir du texte supplémentaire
+                        # Essayer de nettoyer en cherchant des motifs communs
+
+                        # Motif : "Traduction : xxxx" ou "Voici la traduction : xxxx"
+                        patterns = [
+                            r'^.*?[Tt]raduction\s*:?\s*(.+)$',
+                            r'^.*?[Vv]oici\s*:?\s*(.+)$',
+                            r'^.*?[Rr]ésultat\s*:?\s*(.+)$',
+                        ]
+
+                        cleaned = result
+                        for pattern in patterns:
+                            match = re.search(pattern, result, re.DOTALL)
+                            if match:
+                                cleaned = match.group(1).strip().strip('"').strip("'")
+                                break
+
+                        # Si après nettoyage c'est encore trop long, tronquer avec avertissement
+                        if len(cleaned) > max_acceptable_length:
+                            # Logger un avertissement dans le chat
+                            warning_msg = f"⚠️ Résultat trop long ({len(result)} car. pour {original_length} car. originaux). Utilisation du résultat tel quel - vérifiez manuellement."
+                            self.root.after(0, lambda msg=warning_msg: self.chat_panel.add_message("system", msg))
+                            result = cleaned  # Utiliser le résultat nettoyé même s'il est long
+                        else:
+                            result = cleaned
 
                 # Fermer la boucle
                 loop.close()
 
+                # Déterminer le texte envoyé à l'IA
+                sent_to_ai = text_to_translate if is_selection and text_to_translate else (original if captured_action in ("translate", "translate_selection") else current_text)
+
                 # Mettre à jour l'UI dans le thread principal
                 # Utiliser les variables capturées (pas les variables de _on_magic_click qui peuvent changer!)
-                self.root.after(0, lambda p=captured_path, l=captured_lang, r=result, a=captured_action:
-                              self._on_translation_success(p, l, r, a))
+                # Passer : path, lang, result (texte retenu), action, selection_data, sent_to_ai, returned_by_ai, prompt (pour debug)
+                self.root.after(0, lambda p=captured_path, l=captured_lang, kept=result, a=captured_action, s=captured_selection, sent=sent_to_ai, ret=returned_by_ai, pr=prompt:
+                              self._on_translation_success(p, l, kept, a, s, sent, ret, pr))
 
             except Exception as ex:
                 # Capturer l'erreur dans une variable locale
@@ -541,23 +659,74 @@ class OllamaFicGUIv2:
         thread = threading.Thread(target=run_translation, daemon=True)
         thread.start()
 
-    def _on_translation_success(self, path: str, lang: str, result: str, action: str):
+    def _on_translation_success(self, path: str, lang: str, kept_text: str, action: str,
+                               selection_data: dict = None, sent_text: str = None,
+                               returned_text: str = None, full_prompt: str = None):
         """
         Callback appelé après succès de la traduction (dans le thread principal).
+
+        Args:
+            path: Chemin de l'entrée
+            lang: Code langue
+            kept_text: Texte retenu/inséré dans le champ
+            action: Action effectuée
+            selection_data: Données de sélection (None si traduction complète)
+            sent_text: Texte envoyé à l'IA
+            returned_text: Réponse brute de l'IA
+            full_prompt: Prompt complet (pour debug)
         """
         try:
-            # Mettre à jour avec historique dans got_manager
-            self.got_manager.update_translation(path, lang, result)
+            is_selection = action in ("translate_selection", "improve_selection")
 
-            # Récupérer l'entrée mise à jour
-            updated_entry = self.got_manager._get_entry_by_path(path)
+            if is_selection and selection_data:
+                # Traduction partielle : remplacer uniquement la sélection
+                # Récupérer l'entrée actuelle
+                current_entry = self.got_manager._get_entry_by_path(path)
+                current_text_before = current_entry[lang]["text"]
+
+                # Construire le nouveau texte en remplaçant la sélection
+                # Utiliser les index de sélection pour remplacer
+                text_widget = self.translation_form.text_widgets.get(lang)
+                if text_widget:
+                    # Obtenir les positions actuelles
+                    start_idx = selection_data["start"]
+                    end_idx = selection_data["end"]
+
+                    # Construire le nouveau texte
+                    text_before = text_widget.get("1.0", start_idx)
+                    text_after = text_widget.get(end_idx, "end-1c")
+                    new_full_text = text_before + kept_text + text_after
+
+                    # Mettre à jour dans got_manager (gère automatiquement l'historique)
+                    self.got_manager.update_translation(path, lang, new_full_text)
+                    updated_entry = self.got_manager._get_entry_by_path(path)
+                else:
+                    # Fallback : mettre à jour le texte complet
+                    self.got_manager.update_translation(path, lang, kept_text)
+                    updated_entry = self.got_manager._get_entry_by_path(path)
+            else:
+                # Traduction complète : comportement normal
+                self.got_manager.update_translation(path, lang, kept_text)
+                updated_entry = self.got_manager._get_entry_by_path(path)
 
             # Mettre à jour les couleurs de l'arbre
             self._update_tree_colors(path)
 
-            # Log dans le chat
+            # Log dans le chat avec informations Envoyé/Retourné/Retenu
             validated = updated_entry[lang]["valid"]
-            self.chat_panel.add_magic_action(lang, action, result, validated)
+
+            # Passer le prompt complet si en mode debug
+            debug_prompt = full_prompt if self.debug_mode else None
+
+            self.chat_panel.add_magic_action(
+                lang=lang,
+                action=action,
+                sent_text=sent_text or "",
+                returned_text=returned_text or "",
+                kept_text=kept_text,
+                validated=validated,
+                full_prompt=debug_prompt
+            )
 
             # Vérifier avec current_entry_state pour savoir si on doit rafraîchir
             if self.current_entry_state["path"] == path:
@@ -681,6 +850,194 @@ class OllamaFicGUIv2:
         # Mettre à jour current_entry_state
         self.current_entry_state["entry"] = self.got_manager._get_entry_by_path(path)
 
+    def _on_user_chat_message(self, message: str):
+        """
+        Gère les messages utilisateur dans le chat.
+
+        Supporte les commandes console avec "/" :
+        - /cd <path> : Change le chemin actuel et sélectionne dans l'arbre
+        - /ia <message> : Dialogue avec l'IA (commande par défaut)
+        - /set, /show, /load, etc. : Commandes internes du provider
+
+        Si pas de "/" au début, traite comme "/ia <message>"
+
+        Args:
+            message: Message de l'utilisateur
+        """
+        # Détecter les commandes (commencent par "/")
+        if message.startswith("/"):
+            # Parser la commande
+            parts = message.split(None, 1)  # Séparer au premier espace
+            command = parts[0][1:].lower()  # Enlever le "/" et mettre en minuscules
+            args = parts[1] if len(parts) > 1 else ""
+
+            # Router vers le bon handler
+            if command == "cd":
+                self._handle_cd_command(args)
+            elif command == "ia":
+                # Dialogue avec l'IA
+                self._handle_ia_command(args)
+            else:
+                # Commande interne du provider (/set, /show, /load, /clear, etc.)
+                self._handle_internal_command(message)
+        else:
+            # Pas de "/" : traiter comme "/ia <message>"
+            self._handle_ia_command(message)
+
+    def _handle_cd_command(self, path: str):
+        """
+        Gère la commande /cd pour naviguer dans l'arbre.
+
+        Args:
+            path: Chemin de destination (ex: "app/title" ou "/app/title")
+        """
+        if not path:
+            # Afficher le chemin actuel
+            current = self.current_entry_state["path"] or "(aucun)"
+            self.chat_panel.add_message("system", f"📍 Chemin actuel: {current}")
+            return
+
+        if not self.got_manager:
+            self.chat_panel.add_error("Aucun fichier chargé")
+            return
+
+        # Nettoyer le chemin (enlever le "/" initial si présent)
+        path = path.strip()
+        if path.startswith("/"):
+            path = path[1:]
+
+        # Vérifier si le chemin existe
+        try:
+            entry = self.got_manager._get_entry_by_path(path)
+
+            # Le chemin existe, trouver l'item correspondant dans l'arbre
+            tree_item = self.path_to_tree_item.get(path)
+
+            if tree_item:
+                # Sélectionner l'item dans l'arbre
+                self.tree.selection_set(tree_item)
+                self.tree.see(tree_item)  # Scroll pour rendre visible
+
+                # La sélection déclenchera automatiquement _on_tree_select
+                # qui mettra à jour le formulaire et le contexte
+
+                self.chat_panel.add_message("system", f"✓ Navigué vers: {path}")
+            else:
+                self.chat_panel.add_error(f"Item d'arbre non trouvé pour: {path}")
+
+        except KeyError:
+            self.chat_panel.add_error(f"Chemin non trouvé: {path}")
+        except Exception as e:
+            self.chat_panel.add_error(f"Erreur de navigation: {str(e)}")
+
+    def _handle_ia_command(self, message: str):
+        """
+        Gère le dialogue avec l'IA (/ia ou message direct).
+
+        Args:
+            message: Message pour l'IA
+        """
+        if not message.strip():
+            self.chat_panel.add_error("Message vide pour l'IA")
+            return
+
+        # Afficher un message de traitement
+        self.chat_panel.add_message("system", "💭 Réflexion en cours...")
+        self.status_label.config(text="💬 Dialogue avec l'IA...")
+        self.root.update()
+
+        def run_chat():
+            """Fonction exécutée dans un thread séparé pour le dialogue"""
+            try:
+                # Créer une nouvelle boucle d'événements pour ce thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # Appeler l'IA avec le message de l'utilisateur
+                # Timeout plus court pour le dialogue (60 secondes)
+                result = loop.run_until_complete(self.ai_client.chat(message, timeout=60))
+                result = result.strip()
+
+                # Fermer la boucle
+                loop.close()
+
+                # Afficher la réponse dans le chat (dans le thread principal)
+                self.root.after(0, lambda r=result: self._on_chat_response_success(r))
+
+            except Exception as ex:
+                error_msg = str(ex)
+                self.root.after(0, lambda msg=error_msg: self._on_chat_response_error(msg))
+
+        # Lancer le thread
+        thread = threading.Thread(target=run_chat, daemon=True)
+        thread.start()
+
+    def _handle_internal_command(self, command: str):
+        """
+        Gère les commandes internes du provider (/set, /show, /load, etc.).
+
+        Args:
+            command: Commande complète avec "/"
+        """
+        # Afficher un message de traitement
+        self.chat_panel.add_message("system", f"🔧 Exécution: {command}")
+        self.status_label.config(text=f"🔧 Commande: {command}")
+        self.root.update()
+
+        def run_command():
+            """Fonction exécutée dans un thread séparé"""
+            try:
+                # Créer une nouvelle boucle d'événements pour ce thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # Exécuter la commande interne
+                result = loop.run_until_complete(self.ai_client.execute_internal_command(command))
+
+                # Fermer la boucle
+                loop.close()
+
+                # Afficher la réponse dans le chat
+                self.root.after(0, lambda r=result: self._on_command_response_success(r))
+
+            except Exception as ex:
+                error_msg = str(ex)
+                self.root.after(0, lambda msg=error_msg: self._on_chat_response_error(msg))
+
+        # Lancer le thread
+        thread = threading.Thread(target=run_command, daemon=True)
+        thread.start()
+
+    def _on_command_response_success(self, response: str):
+        """
+        Affiche la réponse d'une commande interne.
+
+        Args:
+            response: Réponse de la commande
+        """
+        self.chat_panel.add_message("system", response)
+        self.status_label.config(text="✓ Commande exécutée")
+
+    def _on_chat_response_success(self, response: str):
+        """
+        Affiche la réponse de l'IA dans le chat.
+
+        Args:
+            response: Réponse de l'IA
+        """
+        self.chat_panel.add_message("assistant", response)
+        self.status_label.config(text="✓ Réponse reçue")
+
+    def _on_chat_response_error(self, error_message: str):
+        """
+        Affiche une erreur de dialogue dans le chat.
+
+        Args:
+            error_message: Message d'erreur
+        """
+        self.chat_panel.add_error(f"Erreur de dialogue: {error_message}")
+        self.status_label.config(text="❌ Erreur de dialogue")
+
         # Rafraîchir l'entrée dans le formulaire
         self.translation_form.current_entry = self.current_entry_state["entry"]
 
@@ -794,11 +1151,17 @@ class OllamaFicGUIv2:
         """
         Calcule l'état d'un parent basé sur l'état de tous ses enfants traduisibles.
 
+        Logique (noir = "none" = neutre):
+        - Toutes noires (none) → parent noir (none)
+        - Toutes vertes OU noires (au moins une verte, pas de rouge) → parent vert
+        - Toutes rouges OU noires (au moins une rouge, pas de verte) → parent rouge
+        - Mélange de rouges ET vertes (avec ou sans noires) → parent orange
+
         Returns:
-            "green" - Tous les enfants traduisibles sont validés
-            "orange" - Certains enfants sont validés, d'autres non
-            "red" - Aucun enfant n'est validé (ou tous non traduits)
-            "none" - Pas d'enfants traduisibles
+            "green" - Toutes les entrées non-noires sont vertes
+            "orange" - Mélange de rouges et vertes
+            "red" - Toutes les entrées non-noires sont rouges
+            "none" - Toutes les entrées sont noires (ou pas d'enfants traduisibles)
         """
         # Récupérer tous les chemins traduisibles
         all_translatable_paths = self.got_manager.get_all_translatable_paths()
@@ -815,27 +1178,37 @@ class OllamaFicGUIv2:
         # Obtenir l'état de chaque enfant
         states = [self.got_manager.get_validation_state(p) for p in children_paths]
 
-        # Compter les états
+        # Compter les états (noir = "none" est neutre)
         green_count = states.count("green")
-        orange_count = states.count("orange")
+        orange_count = states.count("orange")  # Orange compte comme à la fois rouge et vert
         red_count = states.count("red")
         none_count = states.count("none")
 
         total = len(states)
 
         # Logique de décision
+        # 1. Toutes noires → parent noir
         if none_count == total:
-            # Tous les enfants sont "none" (aucune traduction) → parent aussi "none"
             return "none"
-        elif green_count == total:
-            # Tous verts (toutes traductions validées)
-            return "green"
-        elif green_count > 0 or orange_count > 0:
-            # Au moins un validé partiellement ou totalement
+
+        # Compter les "vraies" entrées colorées (ignorer les noires)
+        has_green = green_count > 0 or orange_count > 0
+        has_red = red_count > 0 or orange_count > 0
+
+        # 2. Il y a des rouges ET des vertes → parent orange
+        if has_green and has_red:
             return "orange"
-        else:
-            # Aucun validé (tous rouges : traductions non validées)
+
+        # 3. Toutes vertes ou noires (au moins une verte) → parent vert
+        if has_green and not has_red:
+            return "green"
+
+        # 4. Toutes rouges ou noires (au moins une rouge) → parent rouge
+        if has_red and not has_green:
             return "red"
+
+        # Par défaut (ne devrait pas arriver)
+        return "none"
 
     def _get_context_for_path(self, path: str) -> str:
         """Récupère le contexte d'un chemin pour l'IA."""
