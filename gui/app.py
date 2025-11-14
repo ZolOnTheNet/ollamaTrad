@@ -290,7 +290,7 @@ class OllamaTradGUI:
         # Mettre à jour le titre de la fenêtre pour indiquer les modifications
         if self.current_file_path:
             filename = Path(self.current_file_path).name
-            self.root.title(f"OllamaTrad v2.0 - {filename} *")
+            self.root.title(f"OllamaTrad - {filename} *")
 
     def _mark_as_saved(self):
         """Marque le fichier comme sauvegardé"""
@@ -298,7 +298,7 @@ class OllamaTradGUI:
         # Mettre à jour le titre de la fenêtre
         if self.current_file_path:
             filename = Path(self.current_file_path).name
-            self.root.title(f"OllamaTrad v2.0 - {filename}")
+            self.root.title(f"OllamaTrad - {filename}")
 
     def open_options_dialog(self):
         """Ouvre la fenêtre d'options"""
@@ -1835,7 +1835,7 @@ class OllamaTradGUI:
     def _show_about(self):
         """Affiche la boîte de dialogue À propos."""
         messagebox.showinfo("À propos",
-            "OllamaTrad v2.0\n\n"
+            "OllamaTrad\n\n"
             "Traduction intelligente de fichiers JSON\n"
             "avec support multi-langues et IA.\n\n"
             "Format: .got.json v2.0\n"
