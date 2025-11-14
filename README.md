@@ -172,6 +172,13 @@ ollamaTrad/
 
 ## 🆘 Aide et dépannage
 
+### Problème Git : "warning: safe.directory 'undefined' not absolute"
+Si vous rencontrez cette erreur lors de l'utilisation de git, exécutez :
+```bash
+git config --global --add safe.directory /chemin/absolu/vers/ollamaTrad
+```
+Remplacez `/chemin/absolu/vers/ollamaTrad` par le chemin complet du projet sur votre machine.
+
 ### L'IA ne répond pas
 - **Ollama** : Vérifiez qu'Ollama est lancé (`ollama serve`)
 - **OpenAI/Mistral/Anthropic** : Vérifiez votre clé API dans Options
