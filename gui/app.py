@@ -167,6 +167,37 @@ class OllamaTradGUI:
                                            font=("Arial", 8), foreground="blue")
         self.current_path_label.pack(side="left", padx=5)
 
+        # === Zone de recherche ===
+        search_frame = ttk.Frame(tree_frame)
+        search_frame.pack(fill="x", padx=5, pady=(0, 5))
+
+        ttk.Label(search_frame, text="Rechercher entrée:",
+                 font=("Arial", 8, "bold")).pack(side="left", padx=(0, 5))
+
+        # Zone de texte pour la recherche
+        self.search_entry = ttk.Entry(search_frame, width=20)
+        self.search_entry.pack(side="left", padx=(0, 5))
+        self.search_entry.bind("<KeyRelease>", self._on_search_text_changed)
+
+        # Bouton précédent
+        self.search_prev_btn = ttk.Button(search_frame, text="<", width=3,
+                                         command=self._search_previous, state="disabled")
+        self.search_prev_btn.pack(side="left", padx=2)
+
+        # Bouton suivant
+        self.search_next_btn = ttk.Button(search_frame, text=">", width=3,
+                                         command=self._search_next, state="disabled")
+        self.search_next_btn.pack(side="left", padx=2)
+
+        # Label pour afficher l'occurrence actuelle
+        self.search_occurrence_label = ttk.Label(search_frame, text="",
+                                                font=("Arial", 8), foreground="gray")
+        self.search_occurrence_label.pack(side="left", padx=5)
+
+        # Variables pour la recherche
+        self.search_results = []  # Liste des items trouvés
+        self.search_current_index = -1  # Index de l'occurrence actuelle
+
         # Treeview avec scrollbar
         tree_scroll_frame = ttk.Frame(tree_frame)
         tree_scroll_frame.pack(fill="both", expand=True, padx=5, pady=(0, 5))
@@ -239,6 +270,7 @@ class OllamaTradGUI:
             on_batch_translate=self._on_batch_translate,
             on_batch_deepl_translate=self._on_batch_deepl_translate,
             on_clear_unvalidated=self._on_batch_clear_unvalidated,
+            on_search_replace=self._on_batch_search_replace,
             got_manager=self.got_manager,
             translation_config=self.translation_config
         )
@@ -1408,6 +1440,165 @@ class OllamaTradGUI:
 
         self.root.after(0, lambda: messagebox.showinfo("Effacement terminé", summary_msg))
 
+    def _on_batch_search_replace(self, lang: str, mode: str, search_text: str,
+                                 replace_text: str, selected_paths: list):
+        """
+        Gère la recherche et le remplacement par lot.
+
+        Args:
+            lang: Code langue (ex: "fr")
+            mode: "translation" (remplacer dans le champ langue) ou "from_ori" (pré-remplir depuis l'original)
+            search_text: Texte à rechercher
+            replace_text: Texte de remplacement (ignoré en mode "from_ori")
+            selected_paths: Liste des chemins sélectionnés
+        """
+        if not self.got_manager:
+            return
+
+        if not search_text:
+            return
+
+        # Démarrer le traitement
+        self.batch_form.start_processing(len(selected_paths))
+
+        # Sauvegarder le chemin de la branche pour la resélectionner après
+        branch_path = self.current_entry_state.get("path", "")
+
+        # Compteurs
+        replaced_count = 0
+        prefilled_count = 0
+
+        # Fonction pour préserver la casse du premier caractère
+        def preserve_case(original_text: str, replacement: str) -> str:
+            """
+            Préserve la casse du premier caractère de l'original dans le remplacement.
+            Ex: "Beastmaster" avec remplacement "maître des animaux" -> "Maître des animaux"
+            """
+            if not original_text or not replacement:
+                return replacement
+
+            if original_text[0].isupper():
+                return replacement[0].upper() + replacement[1:] if len(replacement) > 1 else replacement.upper()
+            else:
+                return replacement[0].lower() + replacement[1:] if len(replacement) > 1 else replacement.lower()
+
+        # Traiter chaque feuille
+        for i, leaf_path in enumerate(selected_paths):
+            # Vérifier si l'utilisateur a demandé l'arrêt
+            if self.batch_form.is_stopped():
+                self.root.after(0, lambda: self.batch_form.finish_processing(success=False))
+                return
+
+            # Mettre à jour la progression
+            self.root.after(0, lambda curr=i, tot=len(selected_paths), p=leaf_path:
+                            self.batch_form.update_progress(curr, tot, p))
+
+            try:
+                # Récupérer l'entrée
+                entry = self.got_manager._get_entry_by_path(leaf_path)
+
+                # Vérifier si c'est bien une entrée traduisible
+                if not isinstance(entry, dict) or "ori" not in entry:
+                    continue
+
+                if mode == "translation":
+                    # Mode 1: Remplacer dans le champ de traduction
+                    if lang not in entry:
+                        continue
+
+                    lang_data = entry[lang]
+                    current_text = ""
+
+                    if isinstance(lang_data, dict):
+                        current_text = lang_data.get("text", "")
+                    elif isinstance(lang_data, str):
+                        current_text = lang_data
+
+                    # Vérifier si le texte de recherche est présent
+                    if search_text in current_text:
+                        # Compter les occurrences pour le remplacement avec casse
+                        occurrences = current_text.count(search_text)
+
+                        # Remplacer avec préservation de la casse du premier caractère
+                        new_text = current_text
+                        for _ in range(occurrences):
+                            # Trouver la position de l'occurrence
+                            idx = new_text.find(search_text)
+                            if idx != -1:
+                                # Extraire le texte original à remplacer
+                                original_fragment = new_text[idx:idx+len(search_text)]
+
+                                # Appliquer le remplacement avec préservation de la casse
+                                case_preserved_replacement = preserve_case(original_fragment, replace_text)
+
+                                # Remplacer cette occurrence
+                                new_text = new_text[:idx] + case_preserved_replacement + new_text[idx+len(search_text):]
+
+                        # Mettre à jour la traduction
+                        self.got_manager.update_translation(leaf_path, lang, new_text)
+                        replaced_count += 1
+
+                        # Marquer comme modifié
+                        self.root.after(0, self._mark_as_modified)
+
+                elif mode == "from_ori":
+                    # Mode 2: Pré-remplir depuis l'original si correspondance exacte
+                    ori_text = entry.get("ori", "")
+
+                    # Vérifier si l'original correspond exactement au texte de recherche
+                    if ori_text == search_text:
+                        # Vérifier si le champ de traduction est vide
+                        is_empty = False
+
+                        if lang not in entry:
+                            is_empty = True
+                        else:
+                            lang_data = entry[lang]
+                            if isinstance(lang_data, dict):
+                                translation_text = lang_data.get("text", "")
+                                is_empty = not translation_text or not translation_text.strip()
+                            elif isinstance(lang_data, str):
+                                is_empty = not lang_data or not lang_data.strip()
+                            else:
+                                is_empty = True
+
+                        # Si vide, pré-remplir avec le texte de remplacement
+                        if is_empty:
+                            self.got_manager.update_translation(leaf_path, lang, replace_text)
+                            prefilled_count += 1
+
+                            # Marquer comme modifié
+                            self.root.after(0, self._mark_as_modified)
+
+            except Exception as e:
+                print(f"Erreur lors du traitement de {leaf_path}: {e}")
+                continue
+
+        # Terminer le traitement
+        self.root.after(0, lambda: self.batch_form.finish_processing(success=True))
+
+        # Rafraîchir l'arbre
+        self.root.after(0, self._populate_tree)
+
+        # Resélectionner la branche
+        if branch_path:
+            self.root.after(100, lambda: self._select_tree_item(branch_path))
+
+        # Message de résumé
+        if mode == "translation":
+            summary_msg = f"✓ Remplacement terminé :\n\n"
+            summary_msg += f"  • {replaced_count} champ(s) modifié(s)\n"
+            summary_msg += f"  • Recherche : \"{search_text}\"\n"
+            summary_msg += f"  • Remplacement : \"{replace_text}\""
+        else:  # from_ori
+            summary_msg = f"✓ Pré-remplissage terminé :\n\n"
+            summary_msg += f"  • {prefilled_count} champ(s) pré-rempli(s)\n"
+            summary_msg += f"  • Original : \"{search_text}\"\n"
+            summary_msg += f"  • Traduction : \"{replace_text}\""
+
+        from tkinter import messagebox
+        self.root.after(0, lambda: messagebox.showinfo("Recherche & Remplacement", summary_msg))
+
     def _on_batch_translate(self, lang: str, selected_paths: list):
         """
         Gère la traduction par lot d'un sous-arbre.
@@ -1913,6 +2104,118 @@ class OllamaTradGUI:
 
         for item in self.tree.get_children():
             collapse_recursive(item)
+
+    # === Méthodes de recherche dans l'arbre ===
+
+    def _on_search_text_changed(self, event=None):
+        """Appelée quand le texte de recherche change."""
+        search_text = self.search_entry.get().strip()
+
+        # Si moins de 3 caractères ou vide, réinitialiser
+        if len(search_text) < 3:
+            self._reset_search()
+            return
+
+        # Effectuer la recherche
+        self._perform_search(search_text)
+
+    def _perform_search(self, search_text: str):
+        """
+        Recherche toutes les occurrences dans l'arbre.
+
+        Args:
+            search_text: Texte à rechercher (insensible à la casse)
+        """
+        self.search_results = []
+        search_lower = search_text.lower()
+
+        # Parcourir tous les items de l'arbre
+        def search_recursive(item):
+            # Récupérer le texte de l'item
+            item_text = self.tree.item(item, "text")
+
+            # Rechercher dans le texte (insensible à la casse)
+            if search_lower in item_text.lower():
+                self.search_results.append(item)
+
+            # Continuer récursivement
+            for child in self.tree.get_children(item):
+                search_recursive(child)
+
+        # Rechercher dans tous les éléments racine
+        for item in self.tree.get_children():
+            search_recursive(item)
+
+        # Mettre à jour l'UI
+        if self.search_results:
+            self.search_current_index = 0
+            self._select_search_result(self.search_current_index)
+            self._update_search_ui()
+        else:
+            self._reset_search()
+
+    def _search_next(self):
+        """Passe à l'occurrence suivante."""
+        if not self.search_results:
+            return
+
+        self.search_current_index = (self.search_current_index + 1) % len(self.search_results)
+        self._select_search_result(self.search_current_index)
+        self._update_search_ui()
+
+    def _search_previous(self):
+        """Passe à l'occurrence précédente."""
+        if not self.search_results:
+            return
+
+        self.search_current_index = (self.search_current_index - 1) % len(self.search_results)
+        self._select_search_result(self.search_current_index)
+        self._update_search_ui()
+
+    def _select_search_result(self, index: int):
+        """
+        Sélectionne un résultat de recherche dans l'arbre.
+
+        Args:
+            index: Index du résultat à sélectionner
+        """
+        if 0 <= index < len(self.search_results):
+            item = self.search_results[index]
+
+            # Déplier tous les parents pour rendre l'item visible
+            parent = self.tree.parent(item)
+            while parent:
+                self.tree.item(parent, open=True)
+                parent = self.tree.parent(parent)
+
+            # Sélectionner l'item et le rendre visible
+            self.tree.selection_set(item)
+            self.tree.see(item)
+
+    def _update_search_ui(self):
+        """Met à jour l'interface de recherche (boutons et label)."""
+        if self.search_results:
+            # Activer les boutons
+            self.search_prev_btn.config(state="normal")
+            self.search_next_btn.config(state="normal")
+
+            # Afficher l'occurrence actuelle
+            current = self.search_current_index + 1
+            total = len(self.search_results)
+            self.search_occurrence_label.config(text=f"{current} / {total}")
+        else:
+            # Désactiver les boutons
+            self.search_prev_btn.config(state="disabled")
+            self.search_next_btn.config(state="disabled")
+            self.search_occurrence_label.config(text="")
+
+    def _reset_search(self):
+        """Réinitialise la recherche."""
+        self.search_results = []
+        self.search_current_index = -1
+        self.search_prev_btn.config(state="disabled")
+        self.search_next_btn.config(state="disabled")
+        self.search_occurrence_label.config(text="")
 
     def save_file(self):
         """Sauvegarde le fichier .got.json."""

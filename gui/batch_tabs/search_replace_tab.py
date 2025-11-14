@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Onglet de recherche et remplacement par lot.
+Onglet de recherche et remplacement par lot - Version améliorée.
+
+Permet de :
+1. Remplacer dans le champ de traduction (avec respect de la casse)
+2. Pré-remplir depuis l'original si correspondance exacte
 """
 
 import tkinter as tk
@@ -16,94 +20,232 @@ from field_selector import FieldSelector
 class SearchReplaceTab(ttk.Frame):
     """Onglet pour rechercher et remplacer dans les champs sélectionnés."""
 
-    def __init__(self, parent, on_search_replace: Optional[Callable] = None):
+    def __init__(self, parent,
+                 visible_languages: list = None,
+                 on_search_replace: Optional[Callable] = None,
+                 got_manager=None,
+                 translation_config: dict = None):
         """
         Initialise l'onglet de recherche/remplacement.
 
         Args:
             parent: Widget parent
-            on_search_replace: Callback(search_text, replace_text, selected_paths, use_regex)
+            visible_languages: Liste des langues visibles
+            on_search_replace: Callback(lang, mode, search, replace, selected_paths)
+            got_manager: GotJsonManager pour calculer les aperçus
+            translation_config: Configuration pour les noms de langues
         """
         super().__init__(parent)
 
+        self.visible_languages = visible_languages or []
         self.on_search_replace = on_search_replace
+        self.got_manager = got_manager
+        self.translation_config = translation_config or {}
 
         self._create_widgets()
 
     def _create_widgets(self):
         """Crée les widgets de l'onglet."""
-        # === Sélecteur de champs ===
-        self.field_selector = FieldSelector(self, title="Champs à traiter")
-        self.field_selector.pack(fill="both", expand=True, padx=10, pady=10)
+        # === Sélecteur de champs (hauteur limitée) ===
+        selector_frame = ttk.Frame(self, height=200)
+        selector_frame.pack(fill="both", expand=False, padx=10, pady=(10, 0))
+        selector_frame.pack_propagate(False)
 
-        # === Zone de recherche/remplacement ===
-        search_frame = ttk.LabelFrame(self, text="Rechercher & Remplacer", padding=10)
-        search_frame.pack(fill="x", padx=10, pady=10)
+        self.field_selector = FieldSelector(
+            selector_frame,
+            title="Champs à traiter"
+        )
+        self.field_selector.pack(fill="both", expand=True)
 
-        # Rechercher
-        search_label_frame = ttk.Frame(search_frame)
-        search_label_frame.pack(fill="x", pady=5)
+        # === Formulaire de recherche/remplacement ===
+        form_frame = ttk.LabelFrame(self, text="📝 Recherche et Remplacement", padding=10)
+        form_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        ttk.Label(search_label_frame, text="🔍 Rechercher:",
-                 font=("Arial", 9, "bold"), width=15).pack(side="left")
+        # Champ 1 : Texte à rechercher + label de comptage
+        search_frame = ttk.Frame(form_frame)
+        search_frame.pack(fill="x", pady=5)
 
-        self.search_entry = ttk.Entry(search_label_frame, font=("Arial", 10))
-        self.search_entry.pack(side="left", fill="x", expand=True, padx=5)
+        ttk.Label(search_frame, text="🔍 Rechercher :", width=15, anchor="e").pack(side="left", padx=(0, 5))
+        self.search_entry = ttk.Entry(search_frame, font=("Arial", 10))
+        self.search_entry.pack(side="left", fill="x", expand=True)
 
-        # Remplacer par
-        replace_label_frame = ttk.Frame(search_frame)
-        replace_label_frame.pack(fill="x", pady=5)
+        # Label de comptage (nombre de champs trouvés)
+        self.count_label = ttk.Label(search_frame, text="", font=("Arial", 9), foreground="blue")
+        self.count_label.pack(side="left", padx=(10, 0))
 
-        ttk.Label(replace_label_frame, text="✏️ Remplacer par:",
-                 font=("Arial", 9, "bold"), width=15).pack(side="left")
+        # Lier la modification du champ de recherche au recalcul
+        self.search_entry.bind("<KeyRelease>", lambda e: self._update_count_label())
 
-        self.replace_entry = ttk.Entry(replace_label_frame, font=("Arial", 10))
-        self.replace_entry.pack(side="left", fill="x", expand=True, padx=5)
+        # Champ 2 : Texte de remplacement
+        replace_frame = ttk.Frame(form_frame)
+        replace_frame.pack(fill="x", pady=5)
 
-        # Options
-        options_frame = ttk.Frame(search_frame)
-        options_frame.pack(fill="x", pady=5)
+        ttk.Label(replace_frame, text="✏️ Remplacer par :", width=15, anchor="e").pack(side="left", padx=(0, 5))
+        self.replace_entry = ttk.Entry(replace_frame, font=("Arial", 10))
+        self.replace_entry.pack(side="left", fill="x", expand=True)
 
-        self.case_sensitive_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(options_frame, text="Sensible à la casse",
-                       variable=self.case_sensitive_var).pack(side="left", padx=5)
+        # === Groupe de choix du mode (global) ===
+        mode_frame = ttk.Frame(form_frame)
+        mode_frame.pack(fill="x", pady=(10, 5))
 
-        self.use_regex_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(options_frame, text="Utiliser regex",
-                       variable=self.use_regex_var).pack(side="left", padx=5)
+        ttk.Label(mode_frame, text="Mode :", width=15, anchor="e").pack(side="left", padx=(0, 5))
 
-        self.whole_word_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(options_frame, text="Mot entier uniquement",
-                       variable=self.whole_word_var).pack(side="left", padx=5)
+        self.mode_var = tk.StringVar(value="translation")
 
-        # Bouton d'action
-        button_frame = ttk.Frame(search_frame)
-        button_frame.pack(fill="x", pady=10)
+        ttk.Radiobutton(mode_frame,
+                       text="Dans la traduction",
+                       variable=self.mode_var,
+                       value="translation",
+                       command=self._update_count_label).pack(side="left", padx=5)
 
-        self.execute_button = ttk.Button(button_frame,
-                                         text="🔄 Appliquer le remplacement",
-                                         command=self._on_execute_clicked)
-        self.execute_button.pack(expand=True)
+        ttk.Radiobutton(mode_frame,
+                       text="Depuis Ori",
+                       variable=self.mode_var,
+                       value="from_ori",
+                       command=self._update_count_label).pack(side="left", padx=5)
 
-        # Info label
-        self.info_label = ttk.Label(search_frame, text="",
-                                    font=("Arial", 8), foreground="gray")
-        self.info_label.pack(pady=5)
+        # === Boutons par langue (avec scrollbar) ===
+        buttons_container = ttk.Frame(form_frame)
+        buttons_container.pack(fill="both", expand=True, pady=(10, 0))
 
-    def _on_execute_clicked(self):
-        """Appelé lors du clic sur le bouton d'exécution."""
-        if self.on_search_replace:
-            search_text = self.search_entry.get()
-            replace_text = self.replace_entry.get()
-            selected_paths = self.field_selector.get_selected_paths()
+        # Canvas avec scrollbar
+        canvas = tk.Canvas(buttons_container, highlightthickness=0, height=150)
+        scrollbar = ttk.Scrollbar(buttons_container, orient="vertical", command=canvas.yview)
 
-            options = {
-                'case_sensitive': self.case_sensitive_var.get(),
-                'use_regex': self.use_regex_var.get(),
-                'whole_word': self.whole_word_var.get()
-            }
+        self.buttons_frame = ttk.Frame(canvas)
+        self.buttons_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
 
-            self.on_search_replace(search_text, replace_text, selected_paths, options)
+        canvas.create_window((0, 0), window=self.buttons_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        self.language_buttons = {}
+        self._create_language_buttons()
+
+    def _create_language_buttons(self):
+        """Crée des boutons simples pour chaque langue."""
+        # Vider les anciens boutons
+        for widget in self.buttons_frame.winfo_children():
+            widget.destroy()
+        self.language_buttons.clear()
+
+        if not self.visible_languages:
+            ttk.Label(self.buttons_frame, text="Aucune langue configurée",
+                     foreground="gray").pack()
+            return
+
+        known_languages = self.translation_config.get("known_languages", {})
+
+        # Créer un bouton simple par langue
+        for lang in self.visible_languages:
+            lang_name = known_languages.get(lang, lang.upper())
+
+            # Bouton simple
+            btn = ttk.Button(self.buttons_frame,
+                           text=f"🔄 Appliquer sur {lang_name}",
+                           command=lambda l=lang: self._on_execute_clicked(l))
+            btn.pack(fill="x", pady=3, padx=5)
+            self.language_buttons[f"btn_{lang}"] = btn
+
+    def _on_execute_clicked(self, lang: str):
+        """
+        Appelé lors du clic sur un bouton d'exécution.
+
+        Args:
+            lang: Code langue
+        """
+        if not self.on_search_replace:
+            return
+
+        search_text = self.search_entry.get().strip()
+        replace_text = self.replace_entry.get().strip()
+
+        if not search_text:
+            from tkinter import messagebox
+            messagebox.showwarning("Champ vide", "Veuillez saisir un texte à rechercher.")
+            return
+
+        # Utiliser le mode global
+        mode = self.mode_var.get()
+
+        selected_paths = self.field_selector.get_selected_paths()
+
+        # Appeler le callback
+        self.on_search_replace(lang, mode, search_text, replace_text, selected_paths)
+
+    def _update_count_label(self):
+        """Met à jour le label indiquant le nombre de champs trouvés."""
+        search_text = self.search_entry.get().strip()
+
+        if not search_text:
+            self.count_label.config(text="")
+            return
+
+        mode = self.mode_var.get()
+        total_count = self._calculate_total_found_count(mode, search_text)
+
+        if total_count > 0:
+            self.count_label.config(text=f"({total_count} champ{'s' if total_count > 1 else ''} trouvé{'s' if total_count > 1 else ''})")
+        else:
+            self.count_label.config(text="(0 champ trouvé)")
+
+    def _calculate_total_found_count(self, mode: str, search: str) -> int:
+        """
+        Calcule le nombre TOTAL de champs trouvés (tous les champs sélectionnés).
+
+        Args:
+            mode: "translation" ou "from_ori"
+            search: Texte à rechercher
+
+        Returns:
+            Nombre total de champs où le texte est trouvé
+        """
+        if not self.got_manager or not search:
+            return 0
+
+        count = 0
+        selected_paths = self.field_selector.get_selected_paths()
+
+        for path in selected_paths:
+            try:
+                entry = self.got_manager._get_entry_by_path(path)
+                if not isinstance(entry, dict) or "ori" not in entry:
+                    continue
+
+                if mode == "translation":
+                    # Recherche dans les champs de traduction de TOUTES les langues
+                    for lang in self.visible_languages:
+                        if lang in entry:
+                            lang_data = entry[lang]
+                            text = ""
+                            if isinstance(lang_data, dict):
+                                text = lang_data.get("text", "")
+                            elif isinstance(lang_data, str):
+                                text = lang_data
+
+                            if search in text:
+                                count += 1
+                                break  # Compter le champ une seule fois même s'il est trouvé dans plusieurs langues
+
+                elif mode == "from_ori":
+                    # Remplacement depuis l'original
+                    ori = entry.get("ori", "")
+                    if ori == search:
+                        count += 1
+
+            except:
+                continue
+
+        return count
+
+    def update_button_counts(self):
+        """Met à jour le label de comptage (plus utilisé sur les boutons)."""
+        self._update_count_label()
 
     def load_fields(self, leaves: list):
         """
@@ -114,20 +256,21 @@ class SearchReplaceTab(ttk.Frame):
         """
         self.field_selector.load_fields(leaves)
 
+    def set_visible_languages(self, languages: list):
+        """Définit les langues visibles."""
+        self.visible_languages = languages
+        self._create_language_buttons()
+
     def enable_button(self):
-        """Active le bouton d'exécution."""
-        self.execute_button.config(state="normal")
+        """Active les boutons d'exécution."""
+        for lang in self.visible_languages:
+            btn = self.language_buttons.get(f"btn_{lang}")
+            if btn:
+                btn.config(state="normal")
 
     def disable_button(self):
-        """Désactive le bouton d'exécution."""
-        self.execute_button.config(state="disabled")
-
-    def set_info(self, message: str, color: str = "gray"):
-        """
-        Affiche un message d'information.
-
-        Args:
-            message: Message à afficher
-            color: Couleur du texte (gray, green, red, orange)
-        """
-        self.info_label.config(text=message, foreground=color)
+        """Désactive les boutons d'exécution."""
+        for lang in self.visible_languages:
+            btn = self.language_buttons.get(f"btn_{lang}")
+            if btn:
+                btn.config(state="disabled")

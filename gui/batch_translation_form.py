@@ -118,7 +118,10 @@ class BatchTranslationForm(ttk.Frame):
         # Onglet 2: Rechercher & Remplacer
         self.search_replace_tab = SearchReplaceTab(
             self.notebook,
-            on_search_replace=self._on_search_replace_clicked
+            visible_languages=self.visible_languages,
+            on_search_replace=self._on_search_replace_clicked,
+            got_manager=self.got_manager,
+            translation_config=self.translation_config
         )
         self.notebook.add(self.search_replace_tab, text="🔍 Rechercher & Remplacer")
 
@@ -180,11 +183,11 @@ class BatchTranslationForm(ttk.Frame):
         if self.on_clear_unvalidated and not self.is_processing:
             self.on_clear_unvalidated(lang, selected_paths)
 
-    def _on_search_replace_clicked(self, search_text: str, replace_text: str,
-                                   selected_paths: list, options: dict):
+    def _on_search_replace_clicked(self, lang: str, mode: str, search_text: str,
+                                   replace_text: str, selected_paths: list):
         """Callback pour rechercher/remplacer."""
         if self.on_search_replace and not self.is_processing:
-            self.on_search_replace(search_text, replace_text, selected_paths, options)
+            self.on_search_replace(lang, mode, search_text, replace_text, selected_paths)
 
     def _on_undo_clicked(self, selected_paths: list, mode: str):
         """Callback pour annuler les modifications."""
@@ -200,6 +203,7 @@ class BatchTranslationForm(ttk.Frame):
         """
         self.visible_languages = languages
         self.translation_tab.set_visible_languages(languages)
+        self.search_replace_tab.set_visible_languages(languages)
 
     def set_got_manager(self, got_manager):
         """
@@ -210,6 +214,7 @@ class BatchTranslationForm(ttk.Frame):
         """
         self.got_manager = got_manager
         self.translation_tab.set_got_manager(got_manager)
+        self.search_replace_tab.got_manager = got_manager
 
     def set_translation_config(self, config: dict):
         """
@@ -220,6 +225,7 @@ class BatchTranslationForm(ttk.Frame):
         """
         self.translation_config = config
         self.translation_tab.set_translation_config(config)
+        self.search_replace_tab.translation_config = config
 
     def load_branch(self, path: str, leaves: list):
         """

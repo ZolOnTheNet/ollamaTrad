@@ -1,0 +1,25 @@
+{
+  "ai_providers": {
+    "default_provider": "ollama",
+    "ollama": {
+      "host": "http://localhost:11434",
+      "default_model": "aya",
+      "timeout": 120
+    },
+    "openai": {
+      "api_key": "YOUR_OPENAI_API_KEY_HERE",
+      "default_model": "gpt-4",
+      "timeout": 30
+    },
+    "mistral": {
+      "api_key": "YOUR_MISTRAL_API_KEY_HERE",
+      "default_model": "mistral-large-latest",
+      "timeout": 30
+    },
+    "anthropic": {
+      "api_key": "YOUR_ANTHROPIC_API_KEY_HERE",
+      "default_model": "claude-3-sonnet-20240229",
+      "timeout": 30
+    }
+  }
+}

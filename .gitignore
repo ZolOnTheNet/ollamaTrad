@@ -42,7 +42,18 @@ Thumbs.db
 data/
 conversations/
 config/settings.json
+config/translation_config.json
+.claude/settings.local.json
 *.log
+
+# Fichiers avec données sensibles ou utilisateur
+*.got.json
+dhtest.got.json
+*.key
+*.pem
+.env
+.env.local
+secrets.json
 
 # Test files
 test_*.json

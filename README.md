@@ -7,8 +7,10 @@
 ### Interface graphique moderne
 - **Formulaire de traduction** : Édition multi-lignes avec auto-ajustement de hauteur
 - **Arbre JSON** : Navigation hiérarchique avec code couleur par état de validation
+- **Recherche dans l'arbre** : Recherche en temps réel avec navigation entre occurrences (< et >)
 - **Chat contextuel** : Dialogue direct avec l'IA pour améliorer les traductions
 - **Traduction par lot** : Sélection de champs et traduction en masse
+- **Boutons DeepL intelligents** : Affichage du coût en caractères avant traduction
 
 ### Support multi-providers IA
 - **Ollama** : Modèles locaux (gratuit)
@@ -125,7 +127,14 @@ python ollamaTrad.py
 - Cliquez sur le bouton de langue souhaité
 - Le compteur DeepL affiche le nombre de caractères qui seront traduits (excluant les champs validés)
 
-### 6. Sauvegarder
+### 6. Rechercher dans l'arbre
+- Tapez au moins **3 caractères** dans la zone de recherche
+- L'arbre se positionne automatiquement sur la première occurrence
+- Utilisez **<** et **>** pour naviguer entre les occurrences
+- Le compteur affiche "X / Y" (occurrence actuelle / total)
+- Recherche **insensible à la casse** dans le texte de toutes les entrées
+
+### 7. Sauvegarder
 - **Menu Fichier → Sauvegarder** ou `Ctrl+S`
 - Option **sauvegarde automatique** à la fermeture dans Options → Avancé
 
@@ -167,6 +176,26 @@ ollamaTrad/
 - **Ollama** : Vérifiez qu'Ollama est lancé (`ollama serve`)
 - **OpenAI/Mistral/Anthropic** : Vérifiez votre clé API dans Options
 - **DeepL** : Vérifiez votre clé API et votre quota de caractères
+
+### Messages d'erreur détaillés
+L'application affiche maintenant des messages d'erreur **ultra-détaillés** dans la console avec :
+- URL appelée et modèle utilisé
+- Timeout configuré
+- Payload JSON complet
+- Réponse exacte du serveur
+- Traceback complet pour le débogage
+
+Exemple :
+```
+============================================================
+❌ ERREUR OLLAMA - DÉTAILS COMPLETS
+============================================================
+📍 URL appelée: http://localhost:11434/api/chat
+🔧 Modèle: aya
+📊 Status HTTP: 404
+📋 Réponse serveur: {"error":"model not found"}
+============================================================
+```
 
 ### Les traductions validées sont retraduits
 - ✅ **Corrigé** : Les champs validés sont maintenant **protégés** contre la retraduction automatique

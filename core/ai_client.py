@@ -9,7 +9,59 @@ import requests
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 import time
+import traceback
 from abc import ABC, abstractmethod
+
+
+def format_error_details(provider_name: str, error_type: str, url: str, model: str,
+                         timeout: int, message: str, payload: dict, error_info: str,
+                         status_code: int = None, api_key: str = None) -> str:
+    """
+    Formate un message d'erreur détaillé pour le débogage.
+
+    Args:
+        provider_name: Nom du provider (Ollama, OpenAI, etc.)
+        error_type: Type d'erreur (HTTP, TIMEOUT, EXCEPTION)
+        url: URL appelée
+        model: Modèle utilisé
+        timeout: Timeout configuré
+        message: Message utilisateur
+        payload: Payload JSON envoyé
+        error_info: Informations supplémentaires sur l'erreur
+        status_code: Code HTTP (si applicable)
+        api_key: Clé API (sera masquée, optionnelle)
+
+    Returns:
+        Message d'erreur formaté
+    """
+    separator = "=" * 60
+    error_details = f"\n{separator}\n"
+
+    if error_type == "HTTP":
+        error_details += f"❌ ERREUR {provider_name.upper()} - DÉTAILS COMPLETS\n"
+    elif error_type == "TIMEOUT":
+        error_details += f"⏱️  TIMEOUT {provider_name.upper()} - DÉTAILS\n"
+    else:
+        error_details += f"💥 EXCEPTION {provider_name.upper()} - DÉTAILS\n"
+
+    error_details += f"{separator}\n"
+    error_details += f"📍 URL appelée: {url}\n"
+    error_details += f"🔧 Modèle: {model}\n"
+    error_details += f"⏱️  Timeout: {timeout}s\n"
+
+    if status_code:
+        error_details += f"📊 Status HTTP: {status_code}\n"
+
+    if api_key:
+        masked_key = '*' * 10 + api_key[-4:] if len(api_key) > 4 else '***'
+        error_details += f"🔑 API Key: {masked_key}\n"
+
+    error_details += f"📝 Message utilisateur (premiers 200 car.): {message[:200]}{'...' if len(message) > 200 else ''}\n"
+    error_details += f"📦 Payload JSON envoyé:\n{json.dumps(payload, indent=2, ensure_ascii=False)}\n"
+    error_details += f"📋 Informations d'erreur:\n{error_info}\n"
+    error_details += f"{separator}\n"
+
+    return error_details
 
 class AIProvider(ABC):
     """Interface abstraite pour les providers AI"""
@@ -265,6 +317,11 @@ class OllamaProvider(AIProvider):
             system_prompt: Prompt système optionnel
             timeout: Timeout en secondes (si None, utilise self.timeout)
         """
+        # Variables pour le débogage
+        url = None
+        payload = None
+        effective_timeout = None
+
         try:
             # Utiliser le timeout fourni ou celui par défaut
             effective_timeout = timeout if timeout is not None else self.timeout
@@ -285,9 +342,11 @@ class OllamaProvider(AIProvider):
                 "stream": False
             }
 
+            url = f"{self.host}/api/chat"
+
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.host}/api/chat",
+                    url,
                     json=payload,
                     timeout=aiohttp.ClientTimeout(total=effective_timeout)
                 ) as response:
@@ -301,10 +360,63 @@ class OllamaProvider(AIProvider):
 
                         return assistant_message
                     else:
-                        raise Exception(f"Erreur Ollama: {response.status}")
+                        # Lire le corps de la réponse pour plus de détails
+                        error_body = await response.text()
+
+                        error_details = (
+                            f"\n{'='*60}\n"
+                            f"❌ ERREUR OLLAMA - DÉTAILS COMPLETS\n"
+                            f"{'='*60}\n"
+                            f"📍 URL appelée: {url}\n"
+                            f"🔧 Modèle: {self.model}\n"
+                            f"⏱️  Timeout: {effective_timeout}s\n"
+                            f"📊 Status HTTP: {response.status}\n"
+                            f"📝 Message utilisateur (premiers 200 car.): {message[:200]}{'...' if len(message) > 200 else ''}\n"
+                            f"📦 Payload JSON envoyé:\n{json.dumps(payload, indent=2, ensure_ascii=False)}\n"
+                            f"📋 Réponse serveur:\n{error_body}\n"
+                            f"{'='*60}\n"
+                        )
+                        print(error_details)  # Afficher dans la console
+                        raise Exception(f"Erreur Ollama HTTP {response.status}: {error_body}")
+
+        except asyncio.TimeoutError:
+            error_details = (
+                f"\n{'='*60}\n"
+                f"⏱️  TIMEOUT OLLAMA - DÉTAILS\n"
+                f"{'='*60}\n"
+                f"📍 URL: {url}\n"
+                f"🔧 Modèle: {self.model}\n"
+                f"⏱️  Timeout configuré: {effective_timeout}s\n"
+                f"📝 Message (premiers 200 car.): {message[:200]}{'...' if len(message) > 200 else ''}\n"
+                f"💡 Suggestion: Augmentez le timeout ou vérifiez que le serveur Ollama répond\n"
+                f"{'='*60}\n"
+            )
+            print(error_details)
+            raise Exception(f"Timeout après {effective_timeout}s lors de l'appel à Ollama")
 
         except Exception as e:
-            raise Exception(f"Erreur lors du chat Ollama: {e}")
+            # Si c'est déjà notre exception formatée, la relever telle quelle
+            if "ERREUR OLLAMA - DÉTAILS COMPLETS" in str(e) or "TIMEOUT OLLAMA" in str(e):
+                raise
+
+            # Sinon, formater une nouvelle erreur détaillée
+            import traceback
+            error_details = (
+                f"\n{'='*60}\n"
+                f"💥 EXCEPTION OLLAMA - DÉTAILS\n"
+                f"{'='*60}\n"
+                f"📍 URL: {url or 'Non définie'}\n"
+                f"🔧 Modèle: {self.model}\n"
+                f"⏱️  Timeout: {effective_timeout}s\n"
+                f"📝 Message (premiers 200 car.): {message[:200] if message else 'N/A'}{'...' if message and len(message) > 200 else ''}\n"
+                f"📦 Payload: {json.dumps(payload, indent=2, ensure_ascii=False) if payload else 'Non défini'}\n"
+                f"🐛 Type d'erreur: {type(e).__name__}\n"
+                f"📄 Message d'erreur: {str(e)}\n"
+                f"📚 Traceback complet:\n{traceback.format_exc()}\n"
+                f"{'='*60}\n"
+            )
+            print(error_details)
+            raise Exception(f"Erreur inattendue Ollama ({type(e).__name__}): {str(e)}")
 
     async def cmd_show(self, args: List[str]) -> str:
         """Version Ollama de /show avec informations détaillées du modèle"""
@@ -438,7 +550,14 @@ class OpenAIProvider(AIProvider):
         if not self.api_key:
             raise Exception("Clé API OpenAI non configurée")
 
+        # Variables pour le débogage
+        url = None
+        payload = None
+        effective_timeout = None
+
         try:
+            effective_timeout = timeout if timeout is not None else self.timeout
+
             # Compter les caractères envoyés
             self._count_characters(message)
             if system_prompt:
@@ -466,12 +585,14 @@ class OpenAIProvider(AIProvider):
                 "Content-Type": "application/json"
             }
 
+            url = self.api_url
+
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    self.api_url,
+                    url,
                     json=payload,
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                    timeout=aiohttp.ClientTimeout(total=effective_timeout)
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
@@ -483,11 +604,61 @@ class OpenAIProvider(AIProvider):
 
                         return assistant_message
                     else:
-                        error_text = await response.text()
-                        raise Exception(f"Erreur OpenAI: {response.status} - {error_text}")
+                        error_body = await response.text()
+
+                        error_details = (
+                            f"\n{'='*60}\n"
+                            f"❌ ERREUR OPENAI - DÉTAILS COMPLETS\n"
+                            f"{'='*60}\n"
+                            f"📍 URL appelée: {url}\n"
+                            f"🔧 Modèle: {self.model}\n"
+                            f"⏱️  Timeout: {effective_timeout}s\n"
+                            f"📊 Status HTTP: {response.status}\n"
+                            f"🔑 API Key: {'*' * 10 + self.api_key[-4:] if self.api_key else 'Non définie'}\n"
+                            f"📝 Message utilisateur (premiers 200 car.): {message[:200]}{'...' if len(message) > 200 else ''}\n"
+                            f"📦 Payload JSON envoyé:\n{json.dumps(payload, indent=2, ensure_ascii=False)}\n"
+                            f"📋 Réponse serveur:\n{error_body}\n"
+                            f"{'='*60}\n"
+                        )
+                        print(error_details)
+                        raise Exception(f"Erreur OpenAI HTTP {response.status}: {error_body}")
+
+        except asyncio.TimeoutError:
+            error_details = (
+                f"\n{'='*60}\n"
+                f"⏱️  TIMEOUT OPENAI - DÉTAILS\n"
+                f"{'='*60}\n"
+                f"📍 URL: {url}\n"
+                f"🔧 Modèle: {self.model}\n"
+                f"⏱️  Timeout configuré: {effective_timeout}s\n"
+                f"📝 Message (premiers 200 car.): {message[:200]}{'...' if len(message) > 200 else ''}\n"
+                f"💡 Suggestion: Augmentez le timeout ou vérifiez votre connexion réseau\n"
+                f"{'='*60}\n"
+            )
+            print(error_details)
+            raise Exception(f"Timeout après {effective_timeout}s lors de l'appel à OpenAI")
 
         except Exception as e:
-            raise Exception(f"Erreur lors du chat OpenAI: {e}")
+            if "ERREUR OPENAI - DÉTAILS COMPLETS" in str(e) or "TIMEOUT OPENAI" in str(e):
+                raise
+
+            import traceback
+            error_details = (
+                f"\n{'='*60}\n"
+                f"💥 EXCEPTION OPENAI - DÉTAILS\n"
+                f"{'='*60}\n"
+                f"📍 URL: {url or 'Non définie'}\n"
+                f"🔧 Modèle: {self.model}\n"
+                f"⏱️  Timeout: {effective_timeout}s\n"
+                f"📝 Message (premiers 200 car.): {message[:200] if message else 'N/A'}{'...' if message and len(message) > 200 else ''}\n"
+                f"📦 Payload: {json.dumps(payload, indent=2, ensure_ascii=False) if payload else 'Non défini'}\n"
+                f"🐛 Type d'erreur: {type(e).__name__}\n"
+                f"📄 Message d'erreur: {str(e)}\n"
+                f"📚 Traceback complet:\n{traceback.format_exc()}\n"
+                f"{'='*60}\n"
+            )
+            print(error_details)
+            raise Exception(f"Erreur inattendue OpenAI ({type(e).__name__}): {str(e)}")
 
     async def cmd_show(self, args: List[str]) -> str:
         """Version OpenAI de /show avec informations spécifiques"""
