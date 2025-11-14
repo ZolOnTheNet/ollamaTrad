@@ -91,7 +91,7 @@ Exemples d'utilisation:
     try:
         if args.gui:
             # Lancer l'interface graphique v2.0
-            print(">> Lancement de l'interface graphique OllamaFic v2.0...")
+            print(">> Lancement de l'interface graphique OllamaTrad v2.0...")
 
             # Import dynamique pour éviter les erreurs si tkinter n'est pas disponible
             try:

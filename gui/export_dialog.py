@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Dialogue d'export pour OllamaFic.
+Dialogue d'export pour OllamaTrad.
 
 Permet d'exporter un fichier .got.json vers un fichier JSON standard
 avec différentes options de traduction.

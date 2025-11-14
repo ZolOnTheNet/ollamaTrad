@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Application Overview
 
-OllamaFic is a Python application for intelligent processing of JSON files using multiple AI providers (Ollama, OpenAI, Mistral, Anthropic). It provides both CLI and GUI interfaces for tasks like translation, content processing, metadata management, and direct AI dialogue with a file system-like navigation approach for JSON structures.
+OllamaTrad is a Python application for intelligent processing of JSON files using multiple AI providers (Ollama, OpenAI, Mistral, Anthropic). It provides both CLI and GUI interfaces for tasks like translation, content processing, metadata management, and direct AI dialogue with a file system-like navigation approach for JSON structures.
 
 ## Running the Application
 

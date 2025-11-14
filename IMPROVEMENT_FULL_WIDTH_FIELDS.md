@@ -372,4 +372,4 @@ Les champs de traduction utilisent maintenant **toute la largeur disponible** de
 
 **Auteur**: Claude (Anthropic)
 **Date**: 2025-10-16
-**Version**: OllamaFic v2.0 - Champs Pleine Largeur
+**Version**: OllamaTrad v2.0 - Champs Pleine Largeur

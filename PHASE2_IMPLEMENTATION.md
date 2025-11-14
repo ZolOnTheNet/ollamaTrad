@@ -79,7 +79,7 @@ Application principale v2.0 avec :
 **Architecture:**
 ```
 ┌────────────────────────────────────────────────────┐
-│ [Fichier] [Affichage] [Aide]      OllamaFic v2.0  │
+│ [Fichier] [Affichage] [Aide]      OllamaTrad v2.0  │
 ├─────────────────┬──────────────────────────────────┤
 │                 │                                  │
 │  Arbre JSON     │  Formulaire de Traduction       │

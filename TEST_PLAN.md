@@ -1,4 +1,4 @@
-# Plan de Test - OllamaFic v2.0 GUI
+# Plan de Test - OllamaTrad v2.0 GUI
 
 ## 📅 Date: 2025-10-16
 
@@ -525,4 +525,4 @@ Si **tous les tests passent**, l'application est prête pour utilisation en prod
 
 **Auteur**: Claude (Anthropic)
 **Date**: 2025-10-16
-**Version**: OllamaFic v2.0 - Plan de Test
+**Version**: OllamaTrad v2.0 - Plan de Test

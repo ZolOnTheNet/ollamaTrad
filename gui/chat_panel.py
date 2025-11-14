@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Panneau de chat contextualisé pour OllamaFic.
+Panneau de chat contextualisé pour OllamaTrad.
 
 Ce module fournit un panneau de chat réductible qui affiche l'historique
 des actions de traduction pour l'entrée actuellement sélectionnée.

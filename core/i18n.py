@@ -1,5 +1,5 @@
 """
-Module d'internationalisation pour OllamaFic
+Module d'internationalisation pour OllamaTrad
 
 Ce module fournit une solution simple d'i18n sans dépendances externes.
 Il utilise des dictionnaires Python pour stocker les traductions.
@@ -23,7 +23,7 @@ class I18n:
         # Traductions par défaut intégrées
         self.translations = {
             "fr": {
-                "app_title": "OllamaFic - Traitement intelligent de JSON",
+                "app_title": "OllamaTrad - Traitement intelligent de JSON",
                 "file_menu": "Fichier",
                 "open_file": "Ouvrir JSON",
                 "save_file": "Sauvegarder",
@@ -84,7 +84,7 @@ class I18n:
                 "file_saved": "Fichier sauvegardé"
             },
             "en": {
-                "app_title": "OllamaFic - Intelligent JSON Processing",
+                "app_title": "OllamaTrad - Intelligent JSON Processing",
                 "file_menu": "File",
                 "open_file": "Open JSON",
                 "save_file": "Save",

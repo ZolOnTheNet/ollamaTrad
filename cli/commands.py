@@ -960,7 +960,7 @@ class CLIInterface:
 
     def run_interactive(self) -> None:
         """Lance le mode interactif"""
-        print("🚀 OllamaFic CLI - Mode interactif")
+        print("🚀 OllamaTrad CLI - Mode interactif")
         print("Tapez 'help' pour voir les commandes disponibles")
 
         while True:
@@ -1115,7 +1115,7 @@ class CLIInterface:
 
 def main():
     """Point d'entrée principal pour le CLI"""
-    parser = argparse.ArgumentParser(description="OllamaFic CLI")
+    parser = argparse.ArgumentParser(description="OllamaTrad CLI")
     parser.add_argument("--file", "-f", help="Fichier JSON à charger au démarrage")
     parser.add_argument("--command", "-c", help="Commande à exécuter directement")
 

@@ -1,10 +1,10 @@
-# Améliorations OllamaFic v2.0 - Résumé des Changements
+# Améliorations OllamaTrad v2.0 - Résumé des Changements
 
 ## 📅 Date: 2025-10-14
 
 ## 🎯 Objectif
 
-Améliorer l'interface graphique v2.0 d'OllamaFic avec un formulaire de traduction moderne, multi-lignes, avec historique avancé et gestion intelligente des changements.
+Améliorer l'interface graphique v2.0 d'OllamaTrad avec un formulaire de traduction moderne, multi-lignes, avec historique avancé et gestion intelligente des changements.
 
 ---
 
@@ -606,7 +606,7 @@ python3 ollamaTrad.py --gui --file data.json
 
 ## 🎉 Conclusion
 
-L'interface graphique v2.0 d'OllamaFic est maintenant mature et prête pour une utilisation professionnelle. Tous les bugs identifiés ont été corrigés, et les fonctionnalités demandées ont été implémentées avec soin.
+L'interface graphique v2.0 d'OllamaTrad est maintenant mature et prête pour une utilisation professionnelle. Tous les bugs identifiés ont été corrigés, et les fonctionnalités demandées ont été implémentées avec soin.
 
 **Points forts**:
 - Interface moderne et intuitive
@@ -621,4 +621,4 @@ L'interface graphique v2.0 d'OllamaFic est maintenant mature et prête pour une 
 
 **Auteur**: Claude (Anthropic)
 **Date**: 2025-10-14
-**Version**: OllamaFic v2.0
+**Version**: OllamaTrad v2.0

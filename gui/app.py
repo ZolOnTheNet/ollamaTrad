@@ -1,2044 +1,2126 @@
+# -*- coding: utf-8 -*-
+"""
+OllamaTrad - Interface graphique de traduction intelligente avec IA.
+
+Fonctionnalités:
+- Formulaire de traduction avec baguette magique
+- Support multi-providers IA (Ollama, OpenAI, Mistral, Anthropic, DeepL)
+- Chat contextualisé avec l'IA
+- Arbre JSON avec code couleur par état de validation
+- Traduction par lot avec sélection de champs
+- Support complet du format .got.json v2.0
+"""
+
 try:
     import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox, scrolledtext
-    from tkinter import simpledialog
+    from tkinter import ttk, filedialog, messagebox
     TKINTER_AVAILABLE = True
 except ImportError:
     TKINTER_AVAILABLE = False
     print("⚠️  tkinter n'est pas disponible sur ce système")
-import json
+
 import sys
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
+import asyncio
 import threading
-import time
+import json
+import re
 
-# Ajouter le répertoire parent au path pour les imports
+# Ajouter le répertoire parent au path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from core.json_manager import JsonManager, JsonPath
-from core.ollama_client import OllamaClient
-from core.metadata import MetadataManager
+from core.got_json_manager import GotJsonManager
 from core.ai_client import AIClient
-from core.operation_history import OperationHistoryManager
+from utils.file_loader import load_file_intelligently
+from gui.translation_form import TranslationForm
+from gui.batch_translation_form import BatchTranslationForm
+from gui.chat_panel import ChatPanel
+from gui.options_dialog import OptionsDialog
+
 
 class OllamaTradGUI:
-    def __init__(self):
+    """Interface graphique pour OllamaTrad - Traduction intelligente avec IA"""
+
+    def __init__(self, initial_file: Optional[str] = None):
         self.root = tk.Tk()
-        self.root.title("OllamaTrad - Interface Graphique")
-        self.root.geometry("1200x800")
+        self.root.title("OllamaTrad - Traduction Intelligente")
+        self.root.geometry("1400x900")
 
         # Composants principaux
-        self.json_manager: Optional[JsonManager] = None
-        self.ollama_client = OllamaClient()
-        self.metadata_manager = MetadataManager()
+        self.got_manager: Optional[GotJsonManager] = None
         self.ai_client = AIClient()
-        self.history_manager = OperationHistoryManager()
-        self.current_path = ""
-        self.current_session: Optional[str] = None
+        self.current_file_path: Optional[str] = None
 
-        # Variables tkinter
-        self.status_var = tk.StringVar(value="Prêt")
-        self.file_var = tk.StringVar(value="Aucun fichier chargé")
-        # Utiliser la logique de sélection du modèle préféré
-        #from core.ollama_client import OllamaClient
-        try:
-        #   ollama_client = OllamaClient()
-            preferred_model = ollama_client.get_preferred_default_model()
-        except:
-            preferred_model = "aya"  # Fallback en cas d'erreur
+        # Configuration des traductions
+        self.translation_config = self._load_translation_config()
 
-        self.model_var = tk.StringVar(value=preferred_model)
+        # Tracker de modifications non sauvegardées
+        self.has_unsaved_changes = False
+        self.last_saved_state = None  # Hash des données pour détecter les changements
 
-        # Variables pour le chat
-        self.command_history_list = []
-        self.command_history_index = -1
+        # Mode debug pour afficher les prompts complets dans le chat
+        self.debug_mode = True  # Mettre à True pour voir les prompts complets
 
-        # Variables pour la nouvelle interface
-        self.current_content = ""
-        self.pending_result = ""
-        self.temp_results = {}  # Stockage temporaire par chemin
-        self.undo_stack = []
-        self.batch_processing = False
-        self.batch_stop_requested = False
-        self.batch_current_item = 0
+        # Mapping des items de l'arbre vers les chemins
+        self.tree_item_to_path: Dict[str, str] = {}
+        self.path_to_tree_item: Dict[str, str] = {}
 
-        # Suivi des modifications pour coloration avec tags
-        self.path_states = {}  # Dict[path] = set of tags
-        # Tags possibles: 'modif', 'svg', 'add', 'plus'
+        # État de l'entrée courante (approche objet propre)
+        self.current_entry_state = {
+            "path": None,        # Chemin de l'entrée actuelle
+            "entry": None        # Données de l'entrée actuelle
+        }
 
-        self.setup_ui()
-        self.setup_keybindings()
-        self.check_ollama_connection()
+        # Créer l'interface
+        self._create_menu()
+        self._create_main_layout()
+        self._create_statusbar()
 
-    def setup_ui(self):
-        """Configure l'interface utilisateur"""
-        # Menu principal
+        # Charger le fichier initial si fourni
+        if initial_file:
+            self.load_file(initial_file)
+
+    def _create_menu(self):
+        """Crée le menu principal."""
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
 
         # Menu Fichier
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Fichier", menu=file_menu)
-        file_menu.add_command(label="Ouvrir JSON", command=self.open_file)
-        file_menu.add_command(label="Sauvegarder", command=self.save_file)
+        file_menu.add_command(label="Ouvrir JSON/GOT...", command=self.open_file_dialog, accelerator="Ctrl+O")
+        file_menu.add_command(label="Sauvegarder", command=self.save_file, accelerator="Ctrl+S")
         file_menu.add_separator()
-        file_menu.add_command(label="Quitter", command=self.root.quit)
-
-        # Menu Session
-        session_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Session", menu=session_menu)
-        session_menu.add_command(label="Démarrer session", command=self.start_session)
-        session_menu.add_command(label="Terminer session", command=self.end_session)
-
-        # Barre d'outils
-        toolbar = ttk.Frame(self.root)
-        toolbar.pack(fill=tk.X, padx=5, pady=2)
-
-        ttk.Button(toolbar, text="📁 Ouvrir", command=self.open_file).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="💾 Sauver", command=self.save_file).pack(side=tk.LEFT, padx=2)
-        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=5, fill=tk.Y)
-
-        # Boutons historique
-        ttk.Button(toolbar, text="⟲ Undo", command=self.undo_operation).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="⟳ Redo", command=self.redo_operation).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="📚 Historique", command=self.show_history).pack(side=tk.LEFT, padx=2)
-        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=5, fill=tk.Y)
-
-        # Sélection du modèle
-        ttk.Label(toolbar, text="Modèle:").pack(side=tk.LEFT, padx=2)
-        self.model_combo = ttk.Combobox(toolbar, textvariable=self.model_var, width=15)
-        self.model_combo.pack(side=tk.LEFT, padx=2)
-
-        # Frame principal avec panneaux
-        main_frame = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Panel gauche - Navigation JSON
-        left_frame = ttk.Frame(main_frame)
-        main_frame.add(left_frame, weight=1)
-
-        ttk.Label(left_frame, text="📂 Navigation JSON").pack(anchor=tk.W)
-
-        # Chemin actuel
-        self.path_var = tk.StringVar(value="/")
-        path_frame = ttk.Frame(left_frame)
-        path_frame.pack(fill=tk.X, pady=2)
-        ttk.Label(path_frame, text="Chemin:").pack(side=tk.LEFT)
-        ttk.Entry(path_frame, textvariable=self.path_var, state="readonly").pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        # Arborescence JSON
-        tree_frame = ttk.Frame(left_frame)
-        tree_frame.pack(fill=tk.BOTH, expand=True, pady=2)
-
-        self.json_tree = ttk.Treeview(tree_frame, selectmode="browse")
-        self.json_tree.heading("#0", text="Structure JSON")
-        self.json_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # Configurer les couleurs de l'arbre
-        self.setup_tree_colors()
-
-        tree_scroll = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.json_tree.yview)
-        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.json_tree.configure(yscrollcommand=tree_scroll.set)
-
-        self.json_tree.bind("<<TreeviewSelect>>", self.on_tree_select)
-        self.json_tree.bind("<Double-1>", self.on_tree_double_click)
-
-        # Boutons de navigation
-        nav_frame = ttk.Frame(left_frame)
-        nav_frame.pack(fill=tk.X, pady=2)
-        ttk.Button(nav_frame, text="🔍 Rechercher", command=self.open_search_dialog).pack(side=tk.LEFT, padx=2)
-        ttk.Button(nav_frame, text="📊 Stats", command=self.show_stats).pack(side=tk.LEFT, padx=2)
-        ttk.Button(nav_frame, text="🤖 Providers", command=self.open_provider_config).pack(side=tk.LEFT, padx=2)
-
-        # Panel droit avec sections verticales et chat redimensionnable
-        right_main_frame = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
-        main_frame.add(right_main_frame, weight=2)
-
-        # Section de travail (3/5)
-        work_frame = ttk.Frame(right_main_frame)
-        right_main_frame.add(work_frame, weight=3)
-
-        # Section chat (2/5)
-        chat_main_frame = ttk.Frame(right_main_frame)
-        right_main_frame.add(chat_main_frame, weight=2)
-
-        # === SECTION DE TRAVAIL ===
-
-        # PanedWindow vertical pour séparer le travail en deux zones redimensionnables
-        work_paned = ttk.PanedWindow(work_frame, orient=tk.VERTICAL)
-        work_paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=2)
-
-        # Section supérieure (contenu + opérations) - poids plus faible pour rester compacte
-        upper_work_frame = ttk.Frame(work_paned)
-        work_paned.add(upper_work_frame, weight=1)
-
-        # 1. Zone de contenu sélectionné (10 lignes)
-        content_section = ttk.LabelFrame(upper_work_frame, text="📄 Contenu sélectionné")
-        content_section.pack(fill=tk.X, padx=0, pady=2)
-
-        self.content_display = scrolledtext.ScrolledText(content_section, wrap=tk.WORD, height=10, state=tk.DISABLED)
-        self.content_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # 2. Opérations courantes
-        operations_section = ttk.LabelFrame(upper_work_frame, text="⚡ Opérations")
-        operations_section.pack(fill=tk.X, padx=0, pady=2)
-
-        # Première ligne d'opérations
-        ops_row1 = ttk.Frame(operations_section)
-        ops_row1.pack(fill=tk.X, padx=5, pady=2)
-
-        ttk.Button(ops_row1, text="🌐 FR", command=lambda: self.quick_translate("fr")).pack(side=tk.LEFT, padx=2)
-        ttk.Button(ops_row1, text="🌐 EN", command=lambda: self.quick_translate("en")).pack(side=tk.LEFT, padx=2)
-        ttk.Button(ops_row1, text="🌐 ES", command=lambda: self.quick_translate("es")).pack(side=tk.LEFT, padx=2)
-        ttk.Button(ops_row1, text="✨ Améliorer", command=lambda: self.quick_process("Améliore ce texte")).pack(side=tk.LEFT, padx=2)
-        ttk.Button(ops_row1, text="🔍 Résumer", command=lambda: self.quick_process("Résume ce texte")).pack(side=tk.LEFT, padx=2)
-
-        # Deuxième ligne avec instruction personnalisée
-        ops_row2 = ttk.Frame(operations_section)
-        ops_row2.pack(fill=tk.X, padx=5, pady=2)
-
-        ttk.Label(ops_row2, text="Instruction:").pack(side=tk.LEFT)
-        self.custom_instruction = tk.StringVar()
-        instruction_entry = ttk.Entry(ops_row2, textvariable=self.custom_instruction, width=30)
-        instruction_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        instruction_entry.bind("<Return>", self.execute_custom_instruction)
-        ttk.Button(ops_row2, text="▶️ Exécuter", command=self.execute_custom_instruction).pack(side=tk.LEFT, padx=2)
-
-        # Troisième ligne pour traitement en lot
-        ops_row3 = ttk.Frame(operations_section)
-        ops_row3.pack(fill=tk.X, padx=5, pady=2)
-
-        ttk.Label(ops_row3, text="Lot:").pack(side=tk.LEFT)
-        self.batch_pattern = tk.StringVar()
-        batch_entry = ttk.Entry(ops_row3, textvariable=self.batch_pattern, width=20)
-        batch_entry.pack(side=tk.LEFT, padx=5)
-        ttk.Button(ops_row3, text="🔄 Traiter lot", command=self.start_batch_processing).pack(side=tk.LEFT, padx=2)
-        self.batch_stop_button = ttk.Button(ops_row3, text="⏸️ Arrêter", command=self.stop_batch_processing, state=tk.DISABLED)
-        self.batch_stop_button.pack(side=tk.LEFT, padx=2)
-
-        # Indicateur de progression
-        self.progress_var = tk.StringVar(value="")
-        self.progress_label = ttk.Label(ops_row3, textvariable=self.progress_var, font=("Arial", 8))
-        self.progress_label.pack(side=tk.LEFT, padx=5)
-
-        # 3. Zone de résultat (section inférieure redimensionnable)
-        result_section = ttk.LabelFrame(work_paned, text="✨ Résultat")
-        work_paned.add(result_section, weight=2)  # Poids plus élevé pour l'expansion
-
-        # Indicateur de sauvegarde
-        result_header = ttk.Frame(result_section)
-        result_header.pack(fill=tk.X, padx=5, pady=2)
-
-        self.save_indicator = tk.StringVar(value="")
-        ttk.Label(result_header, textvariable=self.save_indicator, font=("Arial", 8), foreground="red").pack(side=tk.LEFT)
-
-        self.result_display = scrolledtext.ScrolledText(result_section, wrap=tk.WORD, height=8)
-        self.result_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=2)
-
-        # Boutons d'action sur le résultat
-        result_actions = ttk.Frame(result_section)
-        result_actions.pack(fill=tk.X, padx=5, pady=2)
-
-        ttk.Button(result_actions, text="✅ Appliquer", command=self.apply_result).pack(side=tk.LEFT, padx=2)
-        ttk.Button(result_actions, text="↩️ Annuler", command=self.undo_last_action).pack(side=tk.LEFT, padx=2)
-        ttk.Button(result_actions, text="🗑️ Effacer", command=self.clear_result).pack(side=tk.LEFT, padx=2)
-        ttk.Button(result_actions, text="💾 Sauver temp", command=self.save_temp_result).pack(side=tk.LEFT, padx=2)
-
-        # === SECTION CHAT ===
-
-        ttk.Label(chat_main_frame, text="💬 Chat & Historique").pack(anchor=tk.W, padx=5)
-
-        # Zone d'historique du chat
-        self.chat_history = scrolledtext.ScrolledText(chat_main_frame, wrap=tk.WORD, state=tk.DISABLED)
-        self.chat_history.pack(fill=tk.BOTH, expand=True, padx=5, pady=2)
-
-        # Configuration des couleurs pour le chat
-        self.chat_history.configure(bg="#f8f9fa", fg="#212529")
-        self.chat_history.tag_config("user", foreground="#0066cc", font=("Consolas", 10, "bold"))
-        self.chat_history.tag_config("system", foreground="#28a745", font=("Consolas", 9))
-        self.chat_history.tag_config("error", foreground="#dc3545", font=("Consolas", 9))
-        self.chat_history.tag_config("batch", foreground="#6f42c1", font=("Consolas", 9, "italic"))
-
-        # Zone de saisie des commandes
-        command_input_frame = ttk.Frame(chat_main_frame)
-        command_input_frame.pack(fill=tk.X, padx=5, pady=2)
-
-        # Label avec répertoire courant
-        self.command_label_var = tk.StringVar(value="Commande:")
-        ttk.Label(command_input_frame, textvariable=self.command_label_var).pack(anchor=tk.W)
-
-        entry_frame = ttk.Frame(command_input_frame)
-        entry_frame.pack(fill=tk.X, pady=2)
-
-        self.command_var = tk.StringVar()
-        self.command_entry = ttk.Entry(entry_frame, textvariable=self.command_var, font=("Consolas", 10))
-        self.command_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0,5))
-        self.command_entry.bind("<Return>", self.execute_chat_command)
-        self.command_entry.bind("<Up>", self.command_history_up)
-        self.command_entry.bind("<Down>", self.command_history_down)
-
-        ttk.Button(entry_frame, text="📤", command=self.execute_chat_command).pack(side=tk.RIGHT)
-
-        # Raccourcis rapides
-        shortcuts_frame = ttk.Frame(command_input_frame)
-        shortcuts_frame.pack(fill=tk.X, pady=2)
-
-        shortcuts = [("ls", "ls /"), ("search", "search "), ("stats", "stats")]
-        for label, cmd in shortcuts:
-            ttk.Button(shortcuts_frame, text=label, width=6,
-                      command=lambda c=cmd: self.insert_command_template(c)).pack(side=tk.LEFT, padx=1)
-
-        # Métadonnées compactes
-        meta_compact = ttk.LabelFrame(chat_main_frame, text="🏷️ Métadonnées")
-        meta_compact.pack(fill=tk.X, padx=5, pady=2)
-
-        # Tags en une ligne
-        tags_frame = ttk.Frame(meta_compact)
-        tags_frame.pack(fill=tk.X, padx=5, pady=2)
-        ttk.Label(tags_frame, text="Tags:").pack(side=tk.LEFT)
-        self.tags_var = tk.StringVar()
-        self.tags_entry = ttk.Entry(tags_frame, textvariable=self.tags_var, width=15)
-        self.tags_entry.pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
-        ttk.Button(tags_frame, text="➕", command=self.add_tag).pack(side=tk.RIGHT)
-
-        # Liste des tags
-        self.tags_list = tk.Listbox(meta_compact, height=2)
-        self.tags_list.pack(fill=tk.X, padx=5, pady=2)
-        self.tags_list.bind("<Double-1>", self.remove_tag)
-
-        # Contexte compact
-        ttk.Label(meta_compact, text="Contexte:").pack(anchor=tk.W, padx=5)
-        self.context_text = scrolledtext.ScrolledText(meta_compact, wrap=tk.WORD, height=3)
-        self.context_text.pack(fill=tk.X, padx=5, pady=2)
-        ttk.Button(meta_compact, text="💾 Sauver", command=self.save_context).pack(anchor=tk.E, padx=5, pady=2)
-
-        # Barre de statut
-        status_frame = ttk.Frame(self.root)
-        status_frame.pack(fill=tk.X, padx=5, pady=2)
-
-        ttk.Label(status_frame, textvariable=self.file_var).pack(side=tk.LEFT)
-        ttk.Separator(status_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
-        ttk.Label(status_frame, textvariable=self.status_var).pack(side=tk.LEFT)
-
-    def setup_keybindings(self):
-        """Configure les raccourcis clavier"""
-        self.root.bind('<Control-z>', lambda e: self.undo_last_action())
-        self.root.bind('<Control-Z>', lambda e: self.undo_last_action())  # Maj+Ctrl+Z pour Windows
-        self.root.bind('<Control-s>', lambda e: self.save_file())
-        self.root.bind('<Escape>', lambda e: self.stop_batch_processing())
-
-    def check_ollama_connection(self):
-        """Vérifie la connexion avec Ollama et charge les modèles"""
-        def check():
-            # Effectuer toutes les vérifications sans modifier l'interface
-            try:
-                # 1. Vérifier si Ollama est en cours d'exécution
-                if not self.ollama_client.is_ollama_running():
-                    self.root.after(0, lambda: self.status_var.set("🚀 Démarrage d'Ollama..."))
-                    self.root.after(0, lambda: self.add_chat_message("🔄 Ollama n'est pas en cours d'exécution, tentative de démarrage...", "system"))
-
-                    if self.ollama_client.start_ollama_service():
-                        self.root.after(0, lambda: self.add_chat_message("✅ Ollama démarré avec succès!", "system"))
-                    else:
-                        self.root.after(0, lambda: self.status_var.set("❌ Impossible de démarrer Ollama"))
-                        self.root.after(0, lambda: self.add_chat_message("❌ Impossible de démarrer Ollama automatiquement", "error"))
-                        self.root.after(0, lambda: self.add_chat_message("💡 Veuillez lancer manuellement: ollama serve", "system"))
-                        self.root.after(0, lambda: setattr(self.model_combo, 'values', [f"{self.model_var.get()} (Ollama non connecté)"]))
-                        return
-
-                # 2. Vérifier/télécharger le modèle préféré
-                preferred_model = self.model_var.get()
-                self.root.after(0, lambda: self.status_var.set(f"🔄 Vérification du modèle {preferred_model}..."))
-                if not self.ollama_client.ensure_model_available(preferred_model):
-                    self.root.after(0, lambda: self.add_chat_message(f"⚠️ {preferred_model} n'est pas disponible, utilisation du premier modèle trouvé", "system"))
-
-                # 3. Charger la liste des modèles
-                models = self.ollama_client.get_recommended_models()
-                available_models = [m for m in models if "(non installé)" not in m]
-
-                self.root.after(0, lambda: setattr(self.model_combo, 'values', models))
-
-                # Définir le modèle par défaut
-                if available_models:
-                    # Préférer aya s'il est disponible
-                    found_preferred = None
-                    current_preferred = self.model_var.get()
-
-                    # D'abord chercher aya
-                    for model in available_models:
-                        if "aya" in model.lower():
-                            found_preferred = model
-                            break
-
-                    # Sinon, chercher le modèle actuellement configuré
-                    if not found_preferred:
-                        for model in available_models:
-                            if current_preferred in model:
-                                found_preferred = model
-                                break
-
-                    if found_preferred:
-                        self.root.after(0, lambda: self.model_var.set(found_preferred))
-                    elif self.model_var.get() not in available_models:
-                        self.root.after(0, lambda: self.model_var.set(available_models[0]))
-
-                    self.root.after(0, lambda: self.status_var.set(f"✅ Ollama connecté - {len(available_models)} modèle(s)"))
-                    self.root.after(0, lambda: self.add_chat_message(f"✅ Ollama connecté avec {len(available_models)} modèle(s) disponible(s)", "system"))
-
-                    if preferred_model:
-                        self.root.after(0, lambda: self.add_chat_message(f"🎯 Modèle par défaut: {preferred_model}", "system"))
-
-                else:
-                    self.root.after(0, lambda: self.status_var.set("⚠️ Aucun modèle disponible"))
-                    self.root.after(0, lambda: self.add_chat_message("⚠️ Aucun modèle disponible. Téléchargez un modèle avec: ollama pull aya", "system"))
-
-            except Exception as e:
-                error_msg = f"❌ Erreur lors de la connexion: {e}"
-                self.root.after(0, lambda: self.status_var.set("❌ Erreur de connexion Ollama"))
-                self.root.after(0, lambda: self.add_chat_message(error_msg, "error"))
-                self.root.after(0, lambda: setattr(self.model_combo, 'values', [f"{self.model_var.get()} (erreur de connexion)"]))
-
-        # Démarrer la vérification initiale dans l'interface
-        self.root.after(0, lambda: self.status_var.set("🔄 Vérification d'Ollama..."))
-        threading.Thread(target=check, daemon=True).start()
-
-    def open_file(self):
-        """Ouvre un fichier JSON"""
-        file_path = filedialog.askopenfilename(
-            title="Ouvrir un fichier JSON",
-            filetypes=[("JSON files", "*.json"), ("JSON5 files", "*.json5"), ("All files", "*.*")]
+
+        # Menu Export (sera créé dynamiquement)
+        self.export_menu = tk.Menu(file_menu, tearoff=0)
+        file_menu.add_cascade(label="📤 Exporter vers JSON...", menu=self.export_menu)
+        self._update_export_menu()  # Initialiser le menu export
+
+        file_menu.add_separator()
+        file_menu.add_command(label="⚙️ Options...", command=self.open_options_dialog)
+        file_menu.add_separator()
+        file_menu.add_command(label="Quitter", command=self.root.quit, accelerator="Ctrl+Q")
+
+        # Menu Affichage
+        view_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Affichage", menu=view_menu)
+        view_menu.add_command(label="Tout déplier", command=self._expand_all)
+        view_menu.add_command(label="Tout plier", command=self._collapse_all)
+
+        # Menu Aide
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Aide", menu=help_menu)
+        help_menu.add_command(label="À propos", command=self._show_about)
+
+        # Bindings clavier
+        self.root.bind("<Control-o>", lambda e: self.open_file_dialog())
+        self.root.bind("<Control-s>", lambda e: self.save_file())
+        self.root.bind("<Control-q>", lambda e: self.root.quit())
+
+    def _create_main_layout(self):
+        """Crée le layout principal avec PanedWindow."""
+        # PanedWindow vertical principal
+        self.main_paned = ttk.PanedWindow(self.root, orient="vertical")
+        self.main_paned.pack(fill="both", expand=True)
+
+        # PanedWindow horizontal pour arbre + formulaire
+        top_paned = ttk.PanedWindow(self.main_paned, orient="horizontal")
+        self.main_paned.add(top_paned, weight=3)
+
+        # === GAUCHE: Arbre JSON ===
+        self._create_tree_panel(top_paned)
+
+        # === DROITE: Formulaire de traduction ===
+        self._create_form_panel(top_paned)
+
+        # === BAS: Chat Panel ===
+        self.chat_panel = ChatPanel(self.main_paned, on_user_message=self._on_user_chat_message)
+        self.chat_panel.set_paned_window(self.main_paned)  # Passer la référence
+        self.main_paned.add(self.chat_panel, weight=1)
+
+    def _create_tree_panel(self, parent):
+        """Crée le panneau de l'arbre JSON."""
+        tree_frame = ttk.Frame(parent)
+        parent.add(tree_frame, weight=1)
+
+        # Header
+        tree_header = ttk.Frame(tree_frame)
+        tree_header.pack(fill="x", padx=5, pady=5)
+
+        ttk.Label(tree_header, text="📂 Structure JSON",
+                 font=("Arial", 10, "bold")).pack(side="left")
+
+        ttk.Button(tree_header, text="Tout déplier",
+                  command=self._expand_all, width=12).pack(side="right", padx=2)
+        ttk.Button(tree_header, text="Tout plier",
+                  command=self._collapse_all, width=12).pack(side="right", padx=2)
+
+        # Affichage du chemin actuel (pour debug)
+        current_path_frame = ttk.Frame(tree_frame)
+        current_path_frame.pack(fill="x", padx=5, pady=(0, 5))
+
+        ttk.Label(current_path_frame, text="Chemin actuel:",
+                 font=("Arial", 8, "bold")).pack(side="left")
+        self.current_path_label = ttk.Label(current_path_frame, text="(aucun)",
+                                           font=("Arial", 8), foreground="blue")
+        self.current_path_label.pack(side="left", padx=5)
+
+        # Treeview avec scrollbar
+        tree_scroll_frame = ttk.Frame(tree_frame)
+        tree_scroll_frame.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+
+        tree_scrolly = ttk.Scrollbar(tree_scroll_frame, orient="vertical")
+        tree_scrolly.pack(side="right", fill="y")
+
+        tree_scrollx = ttk.Scrollbar(tree_scroll_frame, orient="horizontal")
+        tree_scrollx.pack(side="bottom", fill="x")
+
+        self.tree = ttk.Treeview(tree_scroll_frame,
+                                yscrollcommand=tree_scrolly.set,
+                                xscrollcommand=tree_scrollx.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+
+        tree_scrolly.config(command=self.tree.yview)
+        tree_scrollx.config(command=self.tree.xview)
+
+        # Configurer la colonne pour qu'elle prenne toute la largeur
+        self.tree.column("#0", width=400, minwidth=200, stretch=True)
+
+        # Configurer les tags de couleur
+        self.tree.tag_configure("green", foreground="#008800")
+        self.tree.tag_configure("orange", foreground="#FF8800")
+        self.tree.tag_configure("red", foreground="#CC0000")
+        self.tree.tag_configure("none", foreground="#000000")
+
+        # Bind sélection
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+
+    def _create_form_panel(self, parent):
+        """Crée le panneau du formulaire de traduction."""
+        form_frame = ttk.Frame(parent)
+        parent.add(form_frame, weight=2)
+
+        # Titre avec boutons undo/redo
+        title_frame = ttk.Frame(form_frame)
+        title_frame.pack(fill="x", padx=10, pady=5)
+
+        ttk.Label(title_frame, text="✏ Formulaire de Traduction",
+                 font=("Arial", 10, "bold")).pack(side="left")
+
+        # Boutons undo/redo (rollback utilise déjà l'historique de traduction)
+        ttk.Label(title_frame, text="Historique:",
+                 font=("Arial", 9)).pack(side="right", padx=(10, 5))
+        ttk.Button(title_frame, text="↶ Annuler",
+                  command=self._undo_all_languages, width=12).pack(side="right", padx=2)
+        ttk.Label(title_frame, text="(Le bouton ↶ annule chaque langue individuellement)",
+                 font=("Arial", 8), foreground="gray").pack(side="right", padx=5)
+
+        # Conteneur pour les formulaires (on switch entre feuille et branche)
+        self.form_container = ttk.Frame(form_frame)
+        self.form_container.pack(fill="both", expand=True)
+
+        # Formulaire de traduction (feuilles)
+        self.translation_form = TranslationForm(
+            self.form_container,
+            self.got_manager,
+            on_magic_click=self._on_magic_click,
+            on_deepl_click=self._on_deepl_click,
+            on_validate=self._on_validate,
+            on_rollback=self._on_rollback,
+            on_manual_edit=self._on_manual_edit
         )
 
-        if file_path:
+        # Formulaire de traduction par lot (branches)
+        self.batch_form = BatchTranslationForm(
+            self.form_container,
+            visible_languages=self.translation_config.get("visible_languages", []),
+            on_batch_translate=self._on_batch_translate,
+            on_batch_deepl_translate=self._on_batch_deepl_translate,
+            got_manager=self.got_manager,
+            translation_config=self.translation_config
+        )
+
+        # Par défaut, rien n'est affiché
+        # Les formulaires seront affichés selon la sélection
+
+    def _create_statusbar(self):
+        """Crée la barre de statut."""
+        statusbar = ttk.Frame(self.root)
+        statusbar.pack(side="bottom", fill="x")
+
+        self.status_label = ttk.Label(statusbar, text="Prêt", relief="sunken", anchor="w")
+        self.status_label.pack(side="left", fill="x", expand=True)
+
+        # Label pour le compteur DeepL (spécifique)
+        self.deepl_count_label = ttk.Label(statusbar, text="", relief="sunken", anchor="e")
+        self.deepl_count_label.pack(side="right", padx=(5, 0))
+
+        # Label pour le compteur de caractères (autres APIs payantes)
+        self.char_count_label = ttk.Label(statusbar, text="📊 0 car.", relief="sunken", anchor="e")
+        self.char_count_label.pack(side="right", padx=(5, 0))
+
+        self.file_label = ttk.Label(statusbar, text="Aucun fichier", relief="sunken", anchor="e")
+        self.file_label.pack(side="right")
+
+        # Mettre à jour le compteur toutes les 2 secondes
+        self._update_character_count()
+
+    def _load_translation_config(self) -> Dict:
+        """Charge la configuration des traductions"""
+        config_path = Path(__file__).parent.parent / "config" / "translation_config.json"
+        if config_path.exists():
             try:
-                self.json_manager = JsonManager(file_path)
-
-                # Configurer le hook d'historique
-                def operation_hook(operation_type: str, affected_data: dict, user_input: dict = None, result: any = None):
-                    self.history_manager.record_operation(
-                        operation_type=operation_type,
-                        user_input=user_input or {},
-                        affected_data=affected_data,
-                        result=result,
-                        provider_info=self.ai_client.get_current_provider_info()
-                    )
-
-                self.json_manager.set_operation_hook(operation_hook)
-                self.file_var.set(f"📁 {Path(file_path).name}")
-                self.populate_tree()
-                self.load_metadata()
-                self.update_command_label()  # Mettre à jour l'affichage du répertoire courant
-                self.status_var.set("✅ Fichier chargé")
-            except Exception as e:
-                messagebox.showerror("Erreur", f"Impossible de charger le fichier:\n{e}")
-
-    def populate_tree(self):
-        """Remplit l'arborescence JSON"""
-        if not self.json_manager:
-            return
-
-        # Vider l'arbre
-        for item in self.json_tree.get_children():
-            self.json_tree.delete(item)
-
-        def add_node(parent, path, name, value):
-            node_id = self.json_tree.insert(parent, tk.END, text=name, values=(path,))
-
-            # Appliquer les couleurs selon l'état de modification
-            self.apply_node_colors(node_id, path)
-
-            if isinstance(value, dict):
-                for key, subvalue in value.items():
-                    sub_path = f"{path}/{key}" if path else key
-                    add_node(node_id, sub_path, key, subvalue)
-            elif isinstance(value, list):
-                for i, item in enumerate(value):
-                    sub_path = f"{path}/{i}" if path else str(i)
-                    add_node(node_id, sub_path, f"[{i}]", item)
-
-        # Ajouter les nœuds racine
-        if isinstance(self.json_manager.data, dict):
-            for key, value in self.json_manager.data.items():
-                add_node("", key, key, value)
-        elif isinstance(self.json_manager.data, list):
-            for i, item in enumerate(self.json_manager.data):
-                add_node("", str(i), f"[{i}]", item)
-
-    def apply_node_colors(self, node_id, path):
-        """Applique les couleurs aux nœuds selon leur état de modification"""
-        if not self.json_manager:
-            return
-
-        # Obtenir l'état de modification
-        mod_state = self.json_manager.get_modification_state(path)
-
-        if mod_state == "MOD":
-            # Rouge pour les modifications non sauvegardées
-            self.json_tree.set(node_id, '#0', self.json_tree.item(node_id, 'text'))
-            self.json_tree.item(node_id, tags=('modified',))
-        elif mod_state == "SAVED":
-            # Vert pour les modifications sauvegardées
-            self.json_tree.set(node_id, '#0', self.json_tree.item(node_id, 'text'))
-            self.json_tree.item(node_id, tags=('saved',))
-        else:
-            # Couleur normale
-            self.json_tree.item(node_id, tags=('normal',))
-
-    def setup_tree_colors(self):
-        """Configure les couleurs pour les différents états dans l'arbre"""
-        # Configuration des tags de couleur
-        self.json_tree.tag_configure('modified', foreground='red', background='#ffeeee')
-        self.json_tree.tag_configure('saved', foreground='green', background='#eeffee')
-        self.json_tree.tag_configure('normal', foreground='black', background='white')
-
-    def on_tree_select(self, event):
-        """Gère la sélection dans l'arbre"""
-        selection = self.json_tree.selection()
-        if selection:
-            item = selection[0]
-            values = self.json_tree.item(item, "values")
-            if values:
-                path = values[0]
-                self.current_path = path
-                self.path_var.set(f"/{path}")
-                # Synchroniser avec JsonManager
-                if self.json_manager:
-                    self.json_manager.current_path = path
-                    self.update_command_label()
-                self.display_content(path)
-
-    def on_tree_double_click(self, event):
-        """Gère le double-clic sur l'arbre"""
-        pass
-
-    def display_content(self, path):
-        """Affiche le contenu d'un chemin dans la nouvelle interface"""
-        if not self.json_manager:
-            return
-
-        try:
-            value = self.json_manager.get_value(path)
-            self.content_display.configure(state=tk.NORMAL)
-            self.content_display.delete(1.0, tk.END)
-
-            if isinstance(value, (dict, list)):
-                content = json.dumps(value, indent=2, ensure_ascii=False)
-            else:
-                content = str(value)
-
-            self.content_display.insert(1.0, content)
-            self.current_content = content
-
-            # Restaurer le résultat temporaire si disponible
-            if path in self.temp_results:
-                self.result_display.delete(1.0, tk.END)
-                self.result_display.insert(1.0, self.temp_results[path])
-                self.save_indicator.set("⚠️ Résultat non sauvegardé")
-            else:
-                self.result_display.delete(1.0, tk.END)
-                self.save_indicator.set("")
-
-        except Exception as e:
-            self.content_display.delete(1.0, tk.END)
-            self.content_display.insert(1.0, f"Erreur: {e}")
-            self.current_content = ""
-        finally:
-            self.content_display.configure(state=tk.DISABLED)
-
-    def translate_to_french(self):
-        """Traduit le contenu sélectionné en français"""
-        self.translate_content("fr")
-
-    def translate_to_english(self):
-        """Traduit le contenu sélectionné en anglais"""
-        self.translate_content("en")
-
-    def translate_content(self, target_lang):
-        """Traduit le contenu avec Ollama"""
-        if not self.json_manager or not self.current_path:
-            messagebox.showwarning("Attention", "Sélectionnez d'abord un élément à traduire")
-            return
-
-        def translate():
-            try:
-                self.status_var.set("🔄 Traduction en cours...")
-                value = self.json_manager.get_value(self.current_path)
-
-                if not isinstance(value, str):
-                    messagebox.showwarning("Attention", "Seuls les champs texte peuvent être traduits")
-                    return
-
-                # Récupérer le contexte
-                metadata = self.metadata_manager.get_metadata(self.json_manager.file_path)
-                context = metadata.context
-
-                result = self.ollama_client.translate_text(
-                    value, "auto", target_lang, self.model_var.get(), context
-                )
-
-                self.result_text.delete(1.0, tk.END)
-                self.result_text.insert(1.0, result)
-                self.status_var.set("✅ Traduction terminée")
-
-            except Exception as e:
-                messagebox.showerror("Erreur", f"Erreur lors de la traduction:\n{e}")
-                self.status_var.set("❌ Erreur de traduction")
-
-        threading.Thread(target=translate, daemon=True).start()
-
-    def process_content(self):
-        """Traite le contenu avec une instruction personnalisée"""
-        if not self.json_manager or not self.current_path:
-            messagebox.showwarning("Attention", "Sélectionnez d'abord un élément à traiter")
-            return
-
-        instruction = self.instruction_text.get(1.0, tk.END).strip()
-        if not instruction:
-            messagebox.showwarning("Attention", "Entrez une instruction")
-            return
-
-        def process():
-            try:
-                self.status_var.set("🔄 Traitement en cours...")
-                value = self.json_manager.get_value(self.current_path)
-
-                if not isinstance(value, str):
-                    messagebox.showwarning("Attention", "Seuls les champs texte peuvent être traités")
-                    return
-
-                metadata = self.metadata_manager.get_metadata(self.json_manager.file_path)
-                context = metadata.context
-
-                result = self.ollama_client.process_json_field(
-                    value, instruction, self.model_var.get(), context
-                )
-
-                self.result_text.delete(1.0, tk.END)
-                self.result_text.insert(1.0, result)
-                self.status_var.set("✅ Traitement terminé")
-
-            except Exception as e:
-                messagebox.showerror("Erreur", f"Erreur lors du traitement:\n{e}")
-                self.status_var.set("❌ Erreur de traitement")
-
-        threading.Thread(target=process, daemon=True).start()
-
-    def apply_result(self):
-        """Applique le résultat au JSON"""
-        if not self.json_manager or not self.current_path:
-            return
-
-        result = self.result_text.get(1.0, tk.END).strip()
-        if not result:
-            return
-
-        try:
-            self.json_manager.set_value(self.current_path, result)
-            self.display_content(self.current_path)
-            self.status_var.set("✅ Modifications appliquées")
-
-            # Enregistrer l'opération dans la session
-            if self.current_session:
-                self.metadata_manager.add_operation(self.current_session, "apply", {
-                    "path": self.current_path,
-                    "new_value": result[:100]
-                })
-
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors de l'application:\n{e}")
-
-    def clear_result(self):
-        """Efface la zone de résultat"""
-        self.result_display.delete(1.0, tk.END)
-        self.save_indicator.set("")
-        if self.current_path in self.temp_results:
-            del self.temp_results[self.current_path]
-
-    # === NOUVELLES MÉTHODES POUR LA NOUVELLE INTERFACE ===
-
-    def quick_translate(self, target_lang: str):
-        """Traduction rapide"""
-        if not self.current_path:
-            self.add_chat_message("❌ Sélectionnez un élément dans l'arbre", "error")
-            return
-
-        try:
-            value = self.json_manager.get_value(self.current_path)
-            if not isinstance(value, str):
-                self.add_chat_message("❌ Sélectionnez un champ texte à traduire", "error")
-                return
-        except:
-            self.add_chat_message("❌ Impossible d'accéder au contenu", "error")
-            return
-
-        command = f"translate /{self.current_path} {target_lang}"
-        self.send_to_chat(command)
-        self.translate_content_new(target_lang)
-
-    def quick_process(self, instruction: str):
-        """Traitement rapide avec instruction prédéfinie"""
-        if not self.current_path:
-            self.add_chat_message("❌ Sélectionnez un élément dans l'arbre", "error")
-            return
-
-        try:
-            value = self.json_manager.get_value(self.current_path)
-            if not isinstance(value, str):
-                self.add_chat_message("❌ Sélectionnez un champ texte à traiter", "error")
-                return
-        except:
-            self.add_chat_message("❌ Impossible d'accéder au contenu", "error")
-            return
-
-        command = f'process /{self.current_path} "{instruction}"'
-        self.send_to_chat(command)
-        self.process_content_with_instruction(instruction)
-
-    def execute_custom_instruction(self, event=None):
-        """Exécute une instruction personnalisée"""
-        instruction = self.custom_instruction.get().strip()
-        if not instruction:
-            return
-
-        if not self.current_path:
-            self.add_chat_message("❌ Sélectionnez un élément dans l'arbre", "error")
-            return
-
-        command = f'process /{self.current_path} "{instruction}"'
-        self.send_to_chat(command)
-        self.process_content_with_instruction(instruction)
-
-    def process_content_with_instruction(self, instruction: str):
-        """Traite le contenu avec une instruction"""
-        if not self.json_manager or not self.current_path:
-            return
-
-        def process():
-            try:
-                self.status_var.set("🔄 Traitement en cours...")
-                value = self.json_manager.get_value(self.current_path)
-
-                if not isinstance(value, str):
-                    self.add_chat_message("❌ Seuls les champs texte peuvent être traités", "error")
-                    return
-
-                metadata = self.metadata_manager.get_metadata(self.json_manager.file_path)
-                context = metadata.context
-
-                result = self.ollama_client.process_json_field(
-                    value, instruction, self.model_var.get(), context
-                )
-
-                self.result_display.delete(1.0, tk.END)
-                self.result_display.insert(1.0, result)
-                self.save_indicator.set("⚠️ Résultat non sauvegardé")
-                self.status_var.set("✅ Traitement terminé")
-
-                # Marquer comme modifié (rouge) car résultat non sauvegardé
-                self.mark_path_modified(self.current_path)
-
-                # Sauvegarder temporairement
-                self.temp_results[self.current_path] = result
-
-                # Enregistrer dans les métadonnées
-                self.metadata_manager.add_processing_note(
-                    self.json_manager.file_path,
-                    f"Traité '{self.current_path}': {instruction[:50]}..."
-                )
-
-            except Exception as e:
-                self.add_chat_message(f"❌ Erreur lors du traitement: {e}", "error")
-                self.status_var.set("❌ Erreur de traitement")
-
-        threading.Thread(target=process, daemon=True).start()
-
-    def save_temp_result(self):
-        """Sauvegarde le résultat temporaire"""
-        if self.current_path:
-            result = self.result_display.get(1.0, tk.END).strip()
-            if result:
-                self.temp_results[self.current_path] = result
-                self.save_indicator.set("💾 Sauvé temporairement")
-                self.add_chat_message(f"💾 Résultat sauvé temporairement pour {self.current_path}", "system")
-
-    def apply_result(self):
-        """Applique le résultat au JSON avec sauvegarde undo"""
-        if not self.json_manager or not self.current_path:
-            return
-
-        result = self.result_display.get(1.0, tk.END).strip()
-        if not result:
-            return
-
-        try:
-            # Sauvegarder l'état actuel pour undo
-            old_value = self.json_manager.get_value(self.current_path)
-            self.undo_stack.append({
-                'path': self.current_path,
-                'old_value': old_value,
-                'action': 'modify'
-            })
-
-            # Appliquer la modification
-            self.json_manager.set_value(self.current_path, result)
-            self.mark_path_saved(self.current_path)  # Marquer comme sauvegardé
-            self.display_content(self.current_path)
-            self.save_indicator.set("")
-            self.status_var.set("✅ Modifications appliquées")
-
-            # Supprimer de la sauvegarde temporaire
-            if self.current_path in self.temp_results:
-                del self.temp_results[self.current_path]
-
-            # Enregistrer l'opération dans la session
-            if self.current_session:
-                self.metadata_manager.add_operation(self.current_session, "apply", {
-                    "path": self.current_path,
-                    "new_value": result[:100]
-                })
-
-            self.add_chat_message(f"✅ Résultat appliqué à {self.current_path}", "system")
-
-        except Exception as e:
-            self.add_chat_message(f"❌ Erreur lors de l'application: {e}", "error")
-
-    def undo_last_action(self):
-        """Annule la dernière action (Ctrl+Z)"""
-        if not self.undo_stack:
-            self.add_chat_message("❌ Aucune action à annuler", "error")
-            return
-
-        try:
-            last_action = self.undo_stack.pop()
-
-            if last_action['action'] == 'modify':
-                self.json_manager.set_value(last_action['path'], last_action['old_value'])
-
-                # Rafraîchir l'affichage si c'est le chemin actuel
-                if last_action['path'] == self.current_path:
-                    self.display_content(self.current_path)
-
-                self.add_chat_message(f"↩️ Annulation: {last_action['path']}", "system")
-                self.status_var.set("↩️ Action annulée")
-
-        except Exception as e:
-            self.add_chat_message(f"❌ Erreur lors de l'annulation: {e}", "error")
-
-    def start_batch_processing(self):
-        """Démarre le traitement en lot"""
-        pattern = self.batch_pattern.get().strip()
-        if not pattern:
-            self.add_chat_message("❌ Entrez un motif pour le traitement en lot", "error")
-            return
-
-        if not self.json_manager:
-            self.add_chat_message("❌ Aucun fichier chargé", "error")
-            return
-
-        # Analyser le pattern (ex: "translate fr descriptions" ou "process 'améliore' title")
-        parts = pattern.split()
-        if len(parts) < 2:
-            self.add_chat_message("❌ Format: 'operation target [params]' ex: 'translate fr descriptions'", "error")
-            return
-
-        operation = parts[0]
-        target = parts[-1]  # dernier mot = cible
-        params = parts[1:-1] if len(parts) > 2 else []
-
-        # Trouver tous les chemins correspondant au target
-        matching_paths = self.find_matching_paths(target)
-
-        if not matching_paths:
-            self.add_chat_message(f"❌ Aucun chemin trouvé pour '{target}'", "error")
-            return
-
-        self.add_chat_message(f"🔄 Démarrage du traitement en lot: {len(matching_paths)} éléments", "batch")
-        self.send_to_chat(f"batch {pattern}")
-
-        # Démarrer le traitement
-        self.batch_processing = True
-        self.batch_stop_requested = False
-        self.batch_current_item = 0
-        self.batch_stop_button.configure(state=tk.NORMAL)
-
-        def process_batch():
-            for i, path in enumerate(matching_paths):
-                if self.batch_stop_requested:
-                    break
-
-                self.batch_current_item = i
-                self.progress_var.set(f"{i+1}/{len(matching_paths)}")
-
-                try:
-                    # Sélectionner l'élément
-                    self.current_path = path
-                    self.root.after(0, lambda: self.display_content(path))
-
-                    # Appliquer l'opération
-                    if operation == "translate" and params:
-                        self.translate_content_new(params[0])
-                    elif operation == "process" and params:
-                        instruction = " ".join(params)
-                        self.process_content_with_instruction(instruction)
-
-                    # Petite pause entre les éléments
-                    time.sleep(0.5)
-
-                except Exception as e:
-                    self.add_chat_message(f"❌ Erreur sur {path}: {e}", "error")
-
-            # Fin du traitement
-            self.batch_processing = False
-            self.batch_stop_button.configure(state=tk.DISABLED)
-            self.progress_var.set("")
-
-            if self.batch_stop_requested:
-                self.add_chat_message(f"⏸️ Traitement arrêté à l'élément {self.batch_current_item + 1}", "batch")
-            else:
-                self.add_chat_message("✅ Traitement en lot terminé", "batch")
-
-        threading.Thread(target=process_batch, daemon=True).start()
-
-    def stop_batch_processing(self):
-        """Arrête le traitement en lot"""
-        if self.batch_processing:
-            self.batch_stop_requested = True
-            self.add_chat_message("⏸️ Arrêt du traitement en lot demandé...", "batch")
-
-    def find_matching_paths(self, target: str) -> list:
-        """Trouve tous les chemins JSON contenant le target"""
-        if not self.json_manager:
-            return []
-
-        matching_paths = []
-
-        def search_recursive(obj, path=""):
-            if isinstance(obj, dict):
-                for key, value in obj.items():
-                    current_path = f"{path}/{key}" if path else key
-
-                    # Vérifier si la clé correspond
-                    if target.lower() in key.lower():
-                        matching_paths.append(current_path)
-
-                    search_recursive(value, current_path)
-
-            elif isinstance(obj, list):
-                for i, item in enumerate(obj):
-                    current_path = f"{path}/{i}" if path else str(i)
-                    search_recursive(item, current_path)
-
-        search_recursive(self.json_manager.data)
-        return matching_paths
-
-    def send_to_chat(self, command: str):
-        """Envoie une commande vers le chat"""
-        self.add_chat_message(f"📝 > {command}", "user")
-
-    def parse_command_options(self, command_parts: list) -> tuple:
-        """Parse les options d'une commande (celles qui commencent par -)"""
-        options = []
-        args = []
-
-        for part in command_parts:
-            if part.startswith('-'):
-                options.append(part[1:])  # Enlever le -
-            else:
-                args.append(part)
-
-        return args, options
-
-    def parse_translate_command(self, command_parts: list) -> dict:
-        """Parse spécifiquement une commande translate avec le nouveau format"""
-        result = {
-            'language': None,
-            'path': None,
-            'options': [],
-            'valid': False
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except:
+                pass
+
+        # Configuration par défaut
+        return {
+            "target_languages": ["fr", "en", "es"],
+            "visible_languages": ["fr", "en", "es"],
+            "prompts": {}
         }
 
-        # Séparer les options et les arguments
-        args, options = self.parse_command_options(command_parts[1:])  # Ignorer 'translate'
+    def _mark_as_modified(self):
+        """Marque le fichier comme ayant des modifications non sauvegardées"""
+        self.has_unsaved_changes = True
+        # Mettre à jour le titre de la fenêtre pour indiquer les modifications
+        if self.current_file_path:
+            filename = Path(self.current_file_path).name
+            self.root.title(f"OllamaTrad v2.0 - {filename} *")
 
-        # Rechercher la langue dans les options
-        language_options = {
-            'fr': 'fr', 'français': 'fr', 'french': 'fr',
-            'en': 'en', 'anglais': 'en', 'english': 'en',
-            'es': 'es', 'espagnol': 'es', 'spanish': 'es',
-            'de': 'de', 'allemand': 'de', 'german': 'de',
-            'it': 'it', 'italien': 'it', 'italian': 'it'
+    def _mark_as_saved(self):
+        """Marque le fichier comme sauvegardé"""
+        self.has_unsaved_changes = False
+        # Mettre à jour le titre de la fenêtre
+        if self.current_file_path:
+            filename = Path(self.current_file_path).name
+            self.root.title(f"OllamaTrad v2.0 - {filename}")
+
+    def open_options_dialog(self):
+        """Ouvre la fenêtre d'options"""
+        def on_save(config):
+            self.translation_config = config
+            # Recharger l'affichage si un fichier est ouvert
+            if self.got_manager:
+                self._refresh_after_config_change()
+
+        OptionsDialog(self.root, on_save=on_save, ai_client=self.ai_client)
+
+    def _refresh_after_config_change(self):
+        """Rafraîchit l'affichage après changement de configuration"""
+        # Mettre à jour les langues visibles dans le formulaire
+        self.translation_form.visible_languages = self.translation_config.get("visible_languages", [])
+
+        # Mettre à jour les langues cibles du manager (si un fichier est chargé)
+        if self.got_manager:
+            self.got_manager.target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
+
+            # Recharger l'entrée courante si elle existe
+            if self.current_entry_state["path"]:
+                current_path = self.current_entry_state["path"]
+                self.translation_form.load_entry(current_path)
+
+            # Mettre à jour les couleurs de l'arbre
+            self._update_all_parent_colors()
+
+        # Mettre à jour la configuration du batch_form
+        self.batch_form.set_visible_languages(self.translation_config.get("visible_languages", []))
+        self.batch_form.set_translation_config(self.translation_config)
+        if self.got_manager:
+            self.batch_form.set_got_manager(self.got_manager)
+
+        # Mettre à jour le compteur DeepL avec la nouvelle limite
+        self._update_character_count()
+
+        self.status_label.config(text="✓ Configuration mise à jour")
+
+    def open_file_dialog(self):
+        """Ouvre un dialogue pour sélectionner un fichier."""
+        filename = filedialog.askopenfilename(
+            title="Ouvrir un fichier JSON ou .got.json",
+            filetypes=[
+                ("Tous fichiers JSON", "*.json *.got.json"),
+                ("Fichiers .got.json", "*.got.json"),
+                ("Fichiers JSON", "*.json"),
+                ("Tous les fichiers", "*.*")
+            ]
+        )
+
+        if filename:
+            self.load_file(filename)
+
+    def load_file(self, filepath: str):
+        """
+        Charge un fichier JSON ou .got.json.
+
+        Args:
+            filepath: Chemin vers le fichier à charger
+        """
+        try:
+            self.status_label.config(text="Chargement en cours...")
+            self.root.update()
+
+            # Utiliser le chargement intelligent
+            self.got_manager, got_path = load_file_intelligently(filepath)
+            self.current_file_path = got_path
+
+            # Appliquer les langues configurées par l'utilisateur
+            self.got_manager.target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
+            self.translation_form.visible_languages = self.translation_config.get("visible_languages", [])
+
+            # Mettre à jour le formulaire
+            self.translation_form.set_got_manager(self.got_manager)
+
+            # Mettre à jour le batch_form
+            self.batch_form.set_got_manager(self.got_manager)
+            self.batch_form.set_translation_config(self.translation_config)
+
+            # Charger l'arbre
+            self._populate_tree()
+
+            # Mettre à jour la barre de statut
+            filename = Path(got_path).name
+            self.file_label.config(text=filename)
+            self.status_label.config(text=f"✓ Fichier chargé: {filename}")
+
+            # Marquer comme non modifié (fichier vient d'être chargé)
+            self._mark_as_saved()
+
+            # Afficher les stats dans le chat
+            stats = self.got_manager.get_translation_stats()
+            self.chat_panel.add_message("system",
+                f"Fichier chargé: {stats['total_entries']} entrées traduisibles")
+
+            # Mettre à jour le menu Export
+            self._update_export_menu()
+
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible de charger le fichier:\n{e}")
+            self.status_label.config(text="❌ Erreur de chargement")
+            import traceback
+            traceback.print_exc()
+
+    def _populate_tree(self):
+        """Remplit l'arbre avec les données du .got.json."""
+        # Nettoyer l'arbre
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        self.tree_item_to_path.clear()
+        self.path_to_tree_item.clear()
+
+        if not self.got_manager or not self.got_manager.data:
+            return
+
+        # Construire l'arbre récursivement
+        self._add_tree_node("", "", self.got_manager.data)
+
+        # Après construction, propager les couleurs à tous les parents
+        self._update_all_parent_colors()
+
+    def _add_tree_node(self, parent_item, current_path, data):
+        """
+        Ajoute récursivement des nœuds à l'arbre.
+
+        Args:
+            parent_item: Item parent dans l'arbre
+            current_path: Chemin actuel (ex: "app/title")
+            data: Données à ajouter
+        """
+        if isinstance(data, dict):
+            for key, value in data.items():
+                # Ignorer le header __ollamafic__
+                if key == "__ollamafic__":
+                    continue
+
+                # Construire le chemin
+                new_path = f"{current_path}/{key}" if current_path else key
+
+                # Déterminer si c'est une entrée traduisible
+                is_translatable = isinstance(value, dict) and "ori" in value
+
+                # Créer le nœud
+                if is_translatable:
+                    # Entrée traduisible - obtenir l'état de validation
+                    state = self.got_manager.get_validation_state(new_path)
+                    icon = self._get_icon_for_state(state)
+                    display_text = f"{icon} {key}"
+                    item = self.tree.insert(parent_item, "end", text=display_text, tags=(state,))
+                else:
+                    # Container ou valeur non traduisible
+                    icon = "📁" if isinstance(value, dict) else "📄"
+                    item = self.tree.insert(parent_item, "end", text=f"{icon} {key}")
+
+                # Sauvegarder le mapping
+                self.tree_item_to_path[item] = new_path
+                self.path_to_tree_item[new_path] = item
+
+                # Récursion pour les enfants
+                if isinstance(value, dict) and not is_translatable:
+                    self._add_tree_node(item, new_path, value)
+
+        elif isinstance(data, list):
+            for i, value in enumerate(data):
+                new_path = f"{current_path}[{i}]"
+
+                # Vérifier si c'est traduisible
+                is_translatable = isinstance(value, dict) and "ori" in value
+
+                if is_translatable:
+                    state = self.got_manager.get_validation_state(new_path)
+                    icon = self._get_icon_for_state(state)
+                    display_text = f"{icon} [{i}]"
+                    item = self.tree.insert(parent_item, "end", text=display_text, tags=(state,))
+                else:
+                    item = self.tree.insert(parent_item, "end", text=f"[{i}]")
+
+                self.tree_item_to_path[item] = new_path
+                self.path_to_tree_item[new_path] = item
+
+                if isinstance(value, (dict, list)) and not is_translatable:
+                    self._add_tree_node(item, new_path, value)
+
+    def _get_icon_for_state(self, state: str) -> str:
+        """Retourne l'icône pour un état de validation."""
+        icons = {
+            "green": "✅",
+            "orange": "🟠",
+            "red": "❌",
+            "none": "⚪"
         }
+        return icons.get(state, "⚪")
 
-        # Trouver la langue dans les options
-        for opt in options:
-            if opt.lower() in language_options:
-                result['language'] = language_options[opt.lower()]
-                break
-
-        # Le dernier argument est le chemin (si présent)
-        if args:
-            result['path'] = args[-1]
-
-        # Les autres options (add, plus)
-        special_options = [opt for opt in options if opt.lower() not in language_options]
-        result['options'] = special_options
-
-        # Valider la commande
-        result['valid'] = result['language'] is not None and result['path'] is not None
-
-        return result
-
-    def collect_text_fields_recursive(self, obj: any, base_path: str = "") -> list:
-        """Collecte récursivement tous les champs texte d'un objet JSON"""
-        text_fields = []
-
-        if isinstance(obj, dict):
-            for key, value in obj.items():
-                current_path = f"{base_path}/{key}" if base_path else key
-
-                if isinstance(value, str) and value.strip():  # Champ texte non vide
-                    text_fields.append(current_path)
-                elif isinstance(value, (dict, list)):  # Continuer récursivement
-                    text_fields.extend(self.collect_text_fields_recursive(value, current_path))
-
-        elif isinstance(obj, list):
-            for i, item in enumerate(obj):
-                current_path = f"{base_path}/{i}" if base_path else str(i)
-
-                if isinstance(item, str) and item.strip():  # Élément texte non vide
-                    text_fields.append(current_path)
-                elif isinstance(item, (dict, list)):  # Continuer récursivement
-                    text_fields.extend(self.collect_text_fields_recursive(item, current_path))
-
-        return text_fields
-
-    def translate_recursive(self, path: str, target_lang: str, options: list):
-        """Traduit récursivement tous les champs texte d'un objet"""
-        if not self.json_manager:
+    def _on_tree_select(self, event):
+        """Gère la sélection dans l'arbre."""
+        selection = self.tree.selection()
+        if not selection:
             return
 
-        try:
-            # Récupérer l'objet au chemin spécifié
-            obj = self.json_manager.get_value(path)
+        item = selection[0]
+        path = self.tree_item_to_path.get(item)
 
-            # Si c'est déjà un string, traduction simple
-            if isinstance(obj, str):
-                if path == self.current_path:
-                    self.translate_with_options(target_lang, options)
-                else:
-                    self.add_chat_message(f"🔄 Translation de {path}", "system")
-                return
+        if path:
+            # Mettre à jour l'état courant AVANT tout
+            try:
+                entry = self.got_manager._get_entry_by_path(path)
+                self.current_entry_state["path"] = path
+                self.current_entry_state["entry"] = entry
+            except:
+                self.current_entry_state["path"] = None
+                self.current_entry_state["entry"] = None
 
-            # Collecter tous les champs texte récursivement
-            text_fields = self.collect_text_fields_recursive(obj, path)
+            # Mettre à jour l'affichage du chemin actuel
+            self.current_path_label.config(text=path)
 
-            if not text_fields:
-                self.add_chat_message(f"❌ Aucun champ texte trouvé dans {path}", "error")
-                return
+            # Vérifier si c'est une feuille traduisible ou une branche
+            is_leaf = self.got_manager.is_translatable_leaf(path)
 
-            self.add_chat_message(f"🔄 Traduction récursive: {len(text_fields)} champs trouvés", "batch")
-
-            # Démarrer le traitement en lot
-            self.batch_processing = True
-            self.batch_stop_requested = False
-            self.batch_current_item = 0
-            self.batch_stop_button.configure(state=tk.NORMAL)
-
-            def process_recursive_translation():
-                for i, field_path in enumerate(text_fields):
-                    if self.batch_stop_requested:
-                        break
-
-                    self.batch_current_item = i
-                    self.progress_var.set(f"{i+1}/{len(text_fields)}")
-
-                    try:
-                        # Sélectionner et traduire le champ
-                        self.current_path = field_path
-                        self.root.after(0, lambda: self.display_content(field_path))
-
-                        # Faire la traduction
-                        self.translate_with_options(target_lang, options)
-
-                        # Auto-appliquer après une courte pause
-                        time.sleep(1)
-                        if not self.batch_stop_requested:
-                            self.root.after(0, self.apply_result)
-
-                        time.sleep(0.5)  # Pause entre les champs
-
-                    except Exception as e:
-                        self.add_chat_message(f"❌ Erreur sur {field_path}: {e}", "error")
-
-                # Fin du traitement
-                self.batch_processing = False
-                self.batch_stop_button.configure(state=tk.DISABLED)
-                self.progress_var.set("")
-
-                if self.batch_stop_requested:
-                    self.add_chat_message(f"⏸️ Traduction récursive arrêtée à {self.batch_current_item + 1}/{len(text_fields)}", "batch")
-                else:
-                    self.add_chat_message(f"✅ Traduction récursive terminée: {len(text_fields)} champs traduits", "batch")
-
-            threading.Thread(target=process_recursive_translation, daemon=True).start()
-
-        except Exception as e:
-            self.add_chat_message(f"❌ Erreur lors de la traduction récursive: {e}", "error")
-
-    def apply_node_colors(self, node_id: str, path: str):
-        """Applique les couleurs aux nœuds selon leur état (priorité: rouge > orange > vert)"""
-        if path in self.path_states:
-            tags = self.path_states[path]
-
-            # Priorité rouge : 'modif' (non sauvegardé) est prioritaire
-            if 'modif' in tags:
-                self.json_tree.item(node_id, tags=("red",))
-            # Orange : éléments étendus après sauvegarde
-            elif ('add' in tags or 'plus' in tags) and 'svg' in tags:
-                self.json_tree.item(node_id, tags=("orange",))
-            # Vert : modifié et sauvegardé
-            elif 'svg' in tags:
-                self.json_tree.item(node_id, tags=("green",))
+            if is_leaf:
+                # C'est une feuille -> Afficher le formulaire de traduction
+                self.batch_form.pack_forget()
+                self.translation_form.pack(fill="both", expand=True)
+                self.translation_form.load_entry(path)
             else:
-                # Pas de couleur spéciale, vérifier si parent modifié
-                if self.is_parent_of_modified(path):
-                    self.json_tree.item(node_id, tags=("parent_modified",))
-                else:
-                    self.json_tree.item(node_id, tags=())
-        elif self.is_parent_of_modified(path):
-            self.json_tree.item(node_id, tags=("parent_modified",))
-        else:
-            self.json_tree.item(node_id, tags=())
+                # C'est une branche -> Afficher le formulaire de traduction par lot
+                self.translation_form.pack_forget()
+                leaves = self.got_manager.get_translatable_leaves_in_subtree(path)
+                self.batch_form.pack(fill="both", expand=True)
+                self.batch_form.load_branch(path, leaves)
 
-    def is_parent_of_modified(self, path: str) -> bool:
-        """Vérifie si un chemin est parent d'un élément modifié"""
-        for modified_path in self.path_states.keys():
-            if modified_path.startswith(path + "/") or (path == "" and "/" in modified_path):
-                return True
-        return False
+            # Mettre à jour le contexte du chat
+            self.chat_panel.set_context(path)
 
-    def add_path_tag(self, path: str, tag: str):
-        """Ajoute un tag à un chemin"""
-        if path not in self.path_states:
-            self.path_states[path] = set()
-        self.path_states[path].add(tag)
-        self.update_tree_colors()
+    def _translate_text(self, text: str, target_lang: str, source_lang: str = "auto") -> Optional[str]:
+        """
+        Traduit un texte avec gestion du timeout.
 
-    def remove_path_tag(self, path: str, tag: str):
-        """Supprime un tag d'un chemin"""
-        if path in self.path_states:
-            self.path_states[path].discard(tag)
-            if not self.path_states[path]:  # Si plus de tags, supprimer le chemin
-                del self.path_states[path]
-            self.update_tree_colors()
+        Args:
+            text: Texte à traduire
+            target_lang: Code langue cible (ex: "fr")
+            source_lang: Code langue source (ex: "en" ou "auto")
 
-    def mark_path_modified(self, path: str):
-        """Marque un chemin comme modifié (non sauvegardé)"""
-        self.add_path_tag(path, 'modif')
-        self.remove_path_tag(path, 'svg')  # Enlever svg si présent
-
-    def mark_path_saved(self, path: str):
-        """Marque un chemin comme sauvegardé"""
-        self.add_path_tag(path, 'svg')
-        self.remove_path_tag(path, 'modif')  # Enlever modif si présent
-
-    def mark_path_extended(self, path: str, extension_type: str):
-        """Marque un chemin comme étendu (add ou plus)"""
-        if extension_type in ['add', 'plus']:
-            self.add_path_tag(path, extension_type)
-
-    def update_tree_colors(self):
-        """Met à jour les couleurs de tous les nœuds de l'arbre"""
-        def update_node_recursive(node_id):
-            # Récupérer le chemin du nœud
-            values = self.json_tree.item(node_id, "values")
-            if values:
-                path = values[0]
-                self.apply_node_colors(node_id, path)
-
-            # Traiter les enfants
-            for child in self.json_tree.get_children(node_id):
-                update_node_recursive(child)
-
-        # Mettre à jour tous les nœuds racine
-        for item in self.json_tree.get_children():
-            update_node_recursive(item)
-
-    def translate_content_new(self, target_lang: str):
-        """Traduit le contenu avec la nouvelle interface"""
-        if not self.json_manager or not self.current_path:
-            return
-
-        def translate():
-            try:
-                self.status_var.set("🔄 Traduction en cours...")
-                value = self.json_manager.get_value(self.current_path)
-
-                if not isinstance(value, str):
-                    self.add_chat_message("❌ Seuls les champs texte peuvent être traduits", "error")
-                    return
-
-                # Récupérer le contexte
-                metadata = self.metadata_manager.get_metadata(self.json_manager.file_path)
-                context = metadata.context
-
-                result = self.ollama_client.translate_text(
-                    value, "auto", target_lang, self.model_var.get(), context
-                )
-
-                self.result_display.delete(1.0, tk.END)
-                self.result_display.insert(1.0, result)
-                self.save_indicator.set("⚠️ Résultat non sauvegardé")
-                self.status_var.set("✅ Traduction terminée")
-
-                # Marquer comme modifié (rouge) car résultat non sauvegardé
-                self.mark_path_modified(self.current_path)
-
-                # Sauvegarder temporairement
-                self.temp_results[self.current_path] = result
-
-                # Enregistrer dans les métadonnées
-                self.metadata_manager.add_processing_note(
-                    self.json_manager.file_path,
-                    f"Traduit '{self.current_path}' en {target_lang}"
-                )
-
-            except Exception as e:
-                self.add_chat_message(f"❌ Erreur lors de la traduction: {e}", "error")
-                self.status_var.set("❌ Erreur de traduction")
-
-        threading.Thread(target=translate, daemon=True).start()
-
-    def translate_with_options(self, target_lang: str, options: list):
-        """Traduit le contenu avec des options spéciales"""
-        if not self.json_manager or not self.current_path:
-            return
-
-        def translate():
-            try:
-                self.status_var.set("🔄 Traduction en cours...")
-                value = self.json_manager.get_value(self.current_path)
-
-                if not isinstance(value, str):
-                    self.add_chat_message("❌ Seuls les champs texte peuvent être traduits", "error")
-                    return
-
-                # Récupérer le contexte
-                metadata = self.metadata_manager.get_metadata(self.json_manager.file_path)
-                context = metadata.context
-
-                translated = self.ollama_client.translate_text(
-                    value, "auto", target_lang, self.model_var.get(), context
-                )
-
-                # Appliquer les options
-                if "plus" in options:
-                    # Ajouter la traduction après l'original
-                    result = f"{value}\n[{target_lang.upper()}] {translated}"
-                    self.mark_path_extended(self.current_path, 'plus')
-                elif "add" in options:
-                    # Ajouter la traduction avant l'original
-                    result = f"[{target_lang.upper()}] {translated}\n{value}"
-                    self.mark_path_extended(self.current_path, 'add')
-                else:
-                    # Traduction standard (remplacement)
-                    result = translated
-
-                self.result_display.delete(1.0, tk.END)
-                self.result_display.insert(1.0, result)
-                self.save_indicator.set("⚠️ Résultat non sauvegardé")
-                self.status_var.set("✅ Traduction terminée")
-
-                # Marquer comme modifié (rouge) car résultat non sauvegardé
-                self.mark_path_modified(self.current_path)
-
-                # Sauvegarder temporairement
-                self.temp_results[self.current_path] = result
-
-                # Enregistrer dans les métadonnées
-                mode = "avec ajout" if "plus" in options or "add" in options else "standard"
-                self.metadata_manager.add_processing_note(
-                    self.json_manager.file_path,
-                    f"Traduit '{self.current_path}' en {target_lang} ({mode})"
-                )
-
-            except Exception as e:
-                self.add_chat_message(f"❌ Erreur lors de la traduction: {e}", "error")
-                self.status_var.set("❌ Erreur de traduction")
-
-        threading.Thread(target=translate, daemon=True).start()
-
-    def save_file(self):
-        """Sauvegarde le fichier JSON"""
-        if not self.json_manager:
-            messagebox.showwarning("Attention", "Aucun fichier chargé")
-            return
-
-        try:
-            self.json_manager.save_file()
-            self.status_var.set("✅ Fichier sauvegardé")
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde:\n{e}")
-
-    def load_metadata(self):
-        """Charge les métadonnées du fichier"""
-        if not self.json_manager:
-            return
-
-        try:
-            metadata = self.metadata_manager.get_metadata(self.json_manager.file_path)
-
-            # Charger les tags
-            self.tags_list.delete(0, tk.END)
-            for tag in metadata.tags:
-                self.tags_list.insert(tk.END, tag)
-
-            # Charger le contexte
-            self.context_text.delete(1.0, tk.END)
-            self.context_text.insert(1.0, metadata.context)
-
-        except Exception as e:
-            print(f"Erreur lors du chargement des métadonnées: {e}")
-
-    def add_tag(self):
-        """Ajoute un tag"""
-        tag = self.tags_var.get().strip()
-        if tag and self.json_manager:
-            try:
-                self.metadata_manager.add_tag(self.json_manager.file_path, tag)
-                self.tags_list.insert(tk.END, tag)
-                self.tags_var.set("")
-                self.status_var.set(f"✅ Tag '{tag}' ajouté")
-            except Exception as e:
-                messagebox.showerror("Erreur", f"Erreur lors de l'ajout du tag:\n{e}")
-
-    def remove_tag(self, event):
-        """Supprime un tag (double-clic)"""
-        selection = self.tags_list.curselection()
-        if selection and self.json_manager:
-            tag = self.tags_list.get(selection[0])
-            try:
-                self.metadata_manager.remove_tag(self.json_manager.file_path, tag)
-                self.tags_list.delete(selection[0])
-                self.status_var.set(f"✅ Tag '{tag}' supprimé")
-            except Exception as e:
-                messagebox.showerror("Erreur", f"Erreur lors de la suppression du tag:\n{e}")
-
-    def update_command_label(self):
-        """Met à jour le label de commande avec le répertoire courant"""
-        if self.json_manager:
-            current_display = self.json_manager.get_current_path_display()
-            self.command_label_var.set(f"Commande {current_display}:")
-        else:
-            self.command_label_var.set("Commande:")
-
-    def select_tree_node(self, path):
-        """Sélectionne le nœud correspondant au chemin dans l'arbre"""
-        if not path:
-            # Racine
-            self.json_tree.selection_set("")
-            return
-
-        # Trouver le nœud correspondant au chemin
-        def find_node_by_path(item, target_path):
-            """Recherche récursive du nœud par chemin"""
-            values = self.json_tree.item(item, "values")
-            if values and values[0] == target_path:
-                return item
-
-            # Rechercher dans les enfants
-            for child in self.json_tree.get_children(item):
-                result = find_node_by_path(child, target_path)
-                if result:
-                    return result
+        Returns:
+            Texte traduit ou None en cas d'erreur/timeout
+        """
+        if not text or not text.strip():
             return None
 
-        # Chercher dans tous les nœuds racine
-        target_node = None
-        for item in self.json_tree.get_children(""):
-            target_node = find_node_by_path(item, path)
-            if target_node:
-                break
+        # Calculer un timeout dynamique basé sur la taille du texte
+        text_length = len(text)
+        estimated_time = text_length / 5  # secondes (vitesse très conservatrice: 5 chars/sec)
+        timeout = max(120, int(estimated_time * 4))  # minimum 120s, marge x4
 
-        if target_node:
-            # Sélectionner et faire défiler vers le nœud
-            self.json_tree.selection_set(target_node)
-            self.json_tree.focus(target_node)
-            self.json_tree.see(target_node)
+        # Construire le prompt
+        prompts = self.translation_config.get("prompts", {})
+        has_html = '<' in text and '>' in text
 
-    def save_context(self):
-        """Sauvegarde le contexte"""
-        if not self.json_manager:
-            return
+        # Construire la phrase de langue source
+        source_lang_phrase = ""
+        if source_lang and source_lang != "auto":
+            lang_names = {
+                "en": "anglais", "fr": "français", "es": "espagnol", "de": "allemand",
+                "it": "italien", "pt": "portugais", "ru": "russe", "ja": "japonais",
+                "zh": "chinois", "ko": "coréen", "ar": "arabe"
+            }
+            source_lang_name = lang_names.get(source_lang, source_lang)
+            source_lang_phrase = f" depuis le {source_lang_name}"
 
-        context = self.context_text.get(1.0, tk.END).strip()
-        try:
-            self.metadata_manager.set_context(self.json_manager.file_path, context)
-            self.status_var.set("✅ Contexte sauvegardé")
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde du contexte:\n{e}")
+        # Obtenir le nom complet de la langue
+        known_languages = self.translation_config.get("known_languages", {})
+        lang_name = known_languages.get(target_lang, target_lang.upper())
 
-    def start_session(self):
-        """Démarre une nouvelle session"""
-        if not self.json_manager:
-            messagebox.showwarning("Attention", "Aucun fichier chargé")
-            return
-
-        try:
-            metadata = self.metadata_manager.get_metadata(self.json_manager.file_path)
-            self.current_session = self.metadata_manager.start_session(
-                self.json_manager.file_path, self.model_var.get(), metadata.context
-            )
-            self.status_var.set(f"✅ Session démarrée: {self.current_session}")
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors du démarrage de la session:\n{e}")
-
-    def end_session(self):
-        """Termine la session actuelle"""
-        if self.current_session:
-            try:
-                self.metadata_manager.end_session(self.current_session)
-                self.status_var.set(f"✅ Session terminée")
-                self.current_session = None
-            except Exception as e:
-                messagebox.showerror("Erreur", f"Erreur lors de la fin de session:\n{e}")
+        if has_html:
+            prompt_template = prompts.get("translate_html",
+                'Traduis le texte suivant{source_lang} en {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\n\n{text}')
+            prompt = prompt_template.format(text=text, lang=lang_name, source_lang=source_lang_phrase)
         else:
-            messagebox.showinfo("Info", "Aucune session active")
-
-    def open_search_dialog(self):
-        """Ouvre une boîte de dialogue de recherche"""
-        if not self.json_manager:
-            messagebox.showwarning("Attention", "Aucun fichier chargé")
-            return
-
-        search_text = simpledialog.askstring("Recherche", "Entrez le terme à rechercher:")
-        if search_text:
-            try:
-                results = self.json_manager.search(search_text)
-                if results:
-                    result_text = f"Trouvé {len(results)} résultat(s):\n\n"
-                    for result in results[:20]:
-                        result_text += f"📍 {result['path']}: {result['match'][:50]}...\n"
-                    messagebox.showinfo("Résultats", result_text)
-                else:
-                    messagebox.showinfo("Résultats", "Aucun résultat trouvé")
-            except Exception as e:
-                messagebox.showerror("Erreur", f"Erreur lors de la recherche:\n{e}")
-
-    def show_stats(self):
-        """Affiche les statistiques du fichier"""
-        if not self.json_manager:
-            messagebox.showwarning("Attention", "Aucun fichier chargé")
-            return
+            prompt_template = prompts.get("translate",
+                'Traduis "{text}"{source_lang} en {lang}. Réponds uniquement avec la traduction, sans explication.')
+            prompt = prompt_template.format(text=text, lang=lang_name, source_lang=source_lang_phrase)
 
         try:
-            stats = self.json_manager.get_stats()
-            stats_text = f"""📊 Statistiques du fichier:
-
-🗂️  Dictionnaires: {stats['dicts']}
-📋 Listes: {stats['lists']}
-📄 Valeurs: {stats['values']}
-🔢 Total éléments: {stats['total_items']}
-✏️  Modifications: {stats['modifications']}
-
-📁 Fichier: {stats['file_path']}"""
-            messagebox.showinfo("Statistiques", stats_text)
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors du calcul des statistiques:\n{e}")
-
-    def add_chat_message(self, message: str, tag: str = "system"):
-        """Ajoute un message à l'historique du chat"""
-        try:
-            if hasattr(self, 'chat_history'):
-                self.chat_history.configure(state=tk.NORMAL)
-                self.chat_history.insert(tk.END, f"{message}\n", tag)
-                self.chat_history.configure(state=tk.DISABLED)
-                self.chat_history.see(tk.END)
-        except AttributeError:
-            # Interface pas encore initialisée, ignorer silencieusement
-            pass
-
-    def execute_chat_command(self, event=None):
-        """Exécute une commande saisie dans le chat"""
-        command = self.command_var.get().strip()
-        if not command:
-            return
-
-        # Ajouter à l'historique
-        self.command_history_list.append(command)
-        self.command_history_index = len(self.command_history_list)
-
-        # Afficher la commande dans le chat
-        self.add_chat_message(f"📝 > {command}", "user")
-
-        # Vider le champ de saisie
-        self.command_var.set("")
-
-        # Traitement spécial pour les commandes /ia et ia
-        if command.startswith('/ia ') or command.startswith('ia '):
-            # Extraire le message
-            if command.startswith('/ia '):
-                message = command[4:].strip()
-            else:
-                message = command[3:].strip()
-
-            if message:
-                self.handle_ia_command(message)
-                return
-
-        # Traitement des commandes internes (/, /set, /show, etc.)
-        if command.startswith('/') and not command.startswith('/ia'):
-            self.handle_internal_command(command)
-            return
-
-        # Parser la commande pour détecter le nouveau format
-        parts = command.split()
-        if parts[0] == "translate" and len(parts) >= 2:
-            translate_info = self.parse_translate_command(parts)
-
-            if translate_info['valid']:
-                path = translate_info['path'].lstrip('/')  # Enlever le / du début
-                target_lang = translate_info['language']
-                options = translate_info['options']
-
-                # Traduction récursive pour tous les types d'objets
-                self.translate_recursive(path, target_lang, options)
-                return
-
-        # Traitement standard via CLI
-        try:
-            from cli.commands import CLIInterface
-
-            # Créer une instance CLI temporaire qui utilise nos objets GUI
-            cli = CLIInterface()
-            cli.json_manager = self.json_manager
-            cli.ollama_client = self.ollama_client
-            cli.metadata_manager = self.metadata_manager
-            cli.ai_client = self.ai_client
-            cli.current_session = self.current_session
-
-            # IMPORTANT: Synchroniser le current_path avec le GUI
-            if self.json_manager and hasattr(self, 'current_path'):
-                cli.json_manager.current_path = self.current_path
-                cli.current_path = self.current_path
-
-            # Capturer la sortie
-            import io
-            import contextlib
-
-            output = io.StringIO()
-            with contextlib.redirect_stdout(output):
-                try:
-                    cli.parse_and_execute(command)
-
-                    # Récupérer les modifications potentielles
-                    if cli.json_manager and cli.json_manager != self.json_manager:
-                        self.json_manager = cli.json_manager
-                        self.populate_tree()
-                        if self.current_path:
-                            self.display_content(self.current_path)
-
-                    # Synchroniser le répertoire courant et mettre à jour l'affichage
-                    if cli.json_manager and self.json_manager:
-                        self.json_manager.current_path = cli.json_manager.current_path
-                        # Si c'est une commande cd, synchroniser l'interface GUI
-                        if command.strip().startswith('cd ') or command.strip() == 'cd':
-                            new_path = self.json_manager.current_path
-                            self.current_path = new_path
-                            self.path_var.set(f"/{new_path}" if new_path else "/")
-                            # Sélectionner le nœud correspondant dans l'arbre
-                            self.select_tree_node(new_path)
-                            # Afficher le contenu
-                            if new_path:
-                                self.display_content(new_path)
-                            else:
-                                self.display_content("")
-                        self.update_command_label()
-
-                    self.current_session = cli.current_session
-
-                except Exception as e:
-                    self.add_chat_message(f"❌ Erreur: {e}", "error")
-                    return
-
-            result = output.getvalue().strip()
-            if result:
-                self.add_chat_message(result, "system")
-            else:
-                self.add_chat_message("✅ Commande exécutée", "system")
-
-            # Rafraîchir l'interface si nécessaire
-            if command.startswith(("load", "ls", "cat", "translate", "validate")):
-                if self.json_manager:
-                    self.populate_tree()
-                    self.load_metadata()
-
-        except Exception as e:
-            self.add_chat_message(f"❌ Erreur lors de l'exécution: {e}", "error")
-
-    def handle_ia_command(self, message: str):
-        """Gère les commandes de dialogue direct avec l'IA"""
-        def ia_chat():
-            try:
-                # Vérifier la connexion
-                provider_name = self.ai_client.get_current_provider_name()
-                if not self.ai_client.check_connection():
-                    self.add_chat_message(f"❌ Impossible de se connecter au provider {provider_name}", "error")
-                    return
-
-                self.add_chat_message(f"🤖 [{provider_name}] Traitement en cours...", "system")
-
-                # Préparer le contexte si disponible
-                system_prompt = None
-                if self.json_manager:
-                    metadata = self.metadata_manager.get_metadata(self.json_manager.file_path)
-                    if metadata.context:
-                        system_prompt = f"Contexte du fichier: {metadata.context}"
-
-                # Envoyer le message de manière asynchrone
-                import asyncio
-
-                async def send_message():
-                    return await self.ai_client.chat(message, system_prompt)
-
-                # Créer une nouvelle boucle d'événements pour ce thread
-                try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    response = loop.run_until_complete(send_message())
-                    loop.close()
-                except Exception as e:
-                    response = f"Erreur lors de la communication: {e}"
-
-                # Afficher la réponse dans l'interface principale
-                self.root.after(0, lambda: self.add_chat_message(f"🤖 {response}", "system"))
-
-                # Enregistrer dans l'historique si session active
-                if self.current_session:
-                    self.root.after(0, lambda: self.metadata_manager.add_operation(
-                        self.current_session, "ia_chat", {
-                            "provider": provider_name,
-                            "message": message[:100],
-                            "response": response[:100]
-                        }
-                    ))
-
-            except Exception as e:
-                self.root.after(0, lambda: self.add_chat_message(f"❌ Erreur lors du dialogue avec l'IA: {e}", "error"))
-
-        # Lancer dans un thread séparé pour ne pas bloquer l'interface
-        threading.Thread(target=ia_chat, daemon=True).start()
-
-    def handle_internal_command(self, command: str):
-        """Gère les commandes internes (/set, /show, /load, etc.)"""
-        def execute_internal():
-            try:
-                # Vérifier la connexion
-                provider_name = self.ai_client.get_current_provider_name()
-                if not self.ai_client.check_connection():
-                    self.root.after(0, lambda: self.add_chat_message(f"❌ Impossible de se connecter au provider {provider_name}", "error"))
-                    return
-
-                self.root.after(0, lambda: self.add_chat_message(f"🔧 [{provider_name}] Exécution de: {command}", "system"))
-
-                # Exécuter la commande de manière asynchrone
-                import asyncio
-
-                async def run_command():
-                    return await self.ai_client.execute_internal_command(command)
-
-                # Créer une nouvelle boucle d'événements pour ce thread
-                try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    response = loop.run_until_complete(run_command())
-                    loop.close()
-                except Exception as e:
-                    response = f"❌ Erreur lors de l'exécution: {e}"
-
-                # Afficher la réponse dans l'interface principale
-                self.root.after(0, lambda: self.add_chat_message(response, "system"))
-
-                # Enregistrer dans l'historique si session active
-                if self.current_session:
-                    self.root.after(0, lambda: self.metadata_manager.add_operation(
-                        self.current_session, "internal_command", {
-                            "provider": provider_name,
-                            "command": command,
-                            "response": response[:100]
-                        }
-                    ))
-
-            except Exception as e:
-                self.root.after(0, lambda: self.add_chat_message(f"❌ Erreur lors de l'exécution de la commande interne: {e}", "error"))
-
-        # Lancer dans un thread séparé pour ne pas bloquer l'interface
-        threading.Thread(target=execute_internal, daemon=True).start()
-
-    def command_history_up(self, event):
-        """Navigation vers le haut dans l'historique des commandes"""
-        if self.command_history_list and self.command_history_index > 0:
-            self.command_history_index -= 1
-            self.command_var.set(self.command_history_list[self.command_history_index])
-
-    def command_history_down(self, event):
-        """Navigation vers le bas dans l'historique des commandes"""
-        if self.command_history_list:
-            if self.command_history_index < len(self.command_history_list) - 1:
-                self.command_history_index += 1
-                self.command_var.set(self.command_history_list[self.command_history_index])
-            else:
-                self.command_history_index = len(self.command_history_list)
-                self.command_var.set("")
-
-    def insert_command_template(self, template: str):
-        """Insert un template de commande dans le champ de saisie"""
-        if "{}" in template:
-            # Si un élément est sélectionné, utiliser son chemin
-            if self.current_path:
-                command = template.format(f"/{self.current_path}")
-            else:
-                command = template.format("")
-        else:
-            command = template
-
-        self.command_var.set(command)
-        self.command_entry.focus()
-
-    def open_provider_config(self):
-        """Ouvre la fenêtre de configuration des providers IA"""
-        config_window = tk.Toplevel(self.root)
-        config_window.title("Configuration des Providers IA")
-        config_window.geometry("600x500")
-        config_window.transient(self.root)
-        config_window.grab_set()
-
-        # Frame principale avec notebook
-        notebook = ttk.Notebook(config_window)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-        # Provider actuel
-        current_frame = ttk.Frame(notebook)
-        notebook.add(current_frame, text="Provider Actuel")
-
-        current_provider = self.ai_client.get_current_provider_name()
-        connection_status = "✓ Connecté" if self.ai_client.check_connection() else "✗ Déconnecté"
-
-        ttk.Label(current_frame, text=f"Provider actuel: {current_provider}", font=("TkDefaultFont", 12, "bold")).pack(pady=10)
-        status_label = ttk.Label(current_frame, text=f"Statut: {connection_status}")
-        status_label.pack(pady=5)
-
-        # Liste des providers disponibles
-        providers_frame = ttk.LabelFrame(current_frame, text="Changer de provider")
-        providers_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        providers = self.ai_client.get_available_providers()
-        provider_var = tk.StringVar(value=current_provider)
-
-        for provider in providers:
-            ttk.Radiobutton(providers_frame, text=provider.title(), variable=provider_var, value=provider).pack(anchor=tk.W, padx=10, pady=2)
-
-        def change_provider():
-            new_provider = provider_var.get()
-            if self.ai_client.set_provider(new_provider):
-                messagebox.showinfo("Succès", f"Provider changé vers: {new_provider}")
-                # Rafraîchir le statut
-                new_status = "✓ Connecté" if self.ai_client.check_connection() else "✗ Déconnecté"
-                status_label.config(text=f"Statut: {new_status}")
-            else:
-                messagebox.showerror("Erreur", f"Impossible de changer vers: {new_provider}")
-
-        ttk.Button(providers_frame, text="Changer", command=change_provider).pack(pady=10)
-
-        # Configuration Ollama
-        ollama_frame = ttk.Frame(notebook)
-        notebook.add(ollama_frame, text="Ollama")
-
-        ollama_config = self.ai_client.config.get("ai_providers", {}).get("ollama", {})
-
-        ttk.Label(ollama_frame, text="Configuration Ollama", font=("TkDefaultFont", 12, "bold")).pack(pady=10)
-
-        # Host
-        ttk.Label(ollama_frame, text="Host:").pack(anchor=tk.W, padx=10)
-        ollama_host_var = tk.StringVar(value=ollama_config.get("host", "http://localhost:11434"))
-        ttk.Entry(ollama_frame, textvariable=ollama_host_var, width=50).pack(padx=10, pady=2)
-
-        # Modèle
-        ttk.Label(ollama_frame, text="Modèle par défaut:").pack(anchor=tk.W, padx=10, pady=(10,0))
-        ollama_model_var = tk.StringVar(value=ollama_config.get("default_model", "aya"))
-        ttk.Entry(ollama_frame, textvariable=ollama_model_var, width=50).pack(padx=10, pady=2)
-
-        def save_ollama_config():
-            config = {
-                "host": ollama_host_var.get(),
-                "default_model": ollama_model_var.get()
-            }
-            self.ai_client.update_provider_config("ollama", config)
-            messagebox.showinfo("Succès", "Configuration Ollama sauvegardée")
-
-        ttk.Button(ollama_frame, text="Sauvegarder", command=save_ollama_config).pack(pady=20)
-
-        # Configuration OpenAI
-        openai_frame = ttk.Frame(notebook)
-        notebook.add(openai_frame, text="OpenAI")
-
-        openai_config = self.ai_client.config.get("ai_providers", {}).get("openai", {})
-
-        ttk.Label(openai_frame, text="Configuration OpenAI", font=("TkDefaultFont", 12, "bold")).pack(pady=10)
-
-        # API Key
-        ttk.Label(openai_frame, text="Clé API:").pack(anchor=tk.W, padx=10)
-        openai_key_var = tk.StringVar(value=openai_config.get("api_key", ""))
-        key_entry = ttk.Entry(openai_frame, textvariable=openai_key_var, width=50, show="*")
-        key_entry.pack(padx=10, pady=2)
-
-        # URL API
-        ttk.Label(openai_frame, text="URL API:").pack(anchor=tk.W, padx=10, pady=(10,0))
-        openai_url_var = tk.StringVar(value=openai_config.get("api_url", "https://api.openai.com/v1/chat/completions"))
-        ttk.Entry(openai_frame, textvariable=openai_url_var, width=50).pack(padx=10, pady=2)
-
-        # Modèle
-        ttk.Label(openai_frame, text="Modèle par défaut:").pack(anchor=tk.W, padx=10, pady=(10,0))
-        openai_model_var = tk.StringVar(value=openai_config.get("default_model", "gpt-4"))
-        ttk.Entry(openai_frame, textvariable=openai_model_var, width=50).pack(padx=10, pady=2)
-
-        def save_openai_config():
-            config = {
-                "api_key": openai_key_var.get(),
-                "api_url": openai_url_var.get(),
-                "default_model": openai_model_var.get()
-            }
-            self.ai_client.update_provider_config("openai", config)
-            messagebox.showinfo("Succès", "Configuration OpenAI sauvegardée")
-
-        ttk.Button(openai_frame, text="Sauvegarder", command=save_openai_config).pack(pady=20)
-
-        # Configuration Mistral
-        mistral_frame = ttk.Frame(notebook)
-        notebook.add(mistral_frame, text="Mistral")
-
-        mistral_config = self.ai_client.config.get("ai_providers", {}).get("mistral", {})
-
-        ttk.Label(mistral_frame, text="Configuration Mistral", font=("TkDefaultFont", 12, "bold")).pack(pady=10)
-
-        # API Key
-        ttk.Label(mistral_frame, text="Clé API:").pack(anchor=tk.W, padx=10)
-        mistral_key_var = tk.StringVar(value=mistral_config.get("api_key", ""))
-        ttk.Entry(mistral_frame, textvariable=mistral_key_var, width=50, show="*").pack(padx=10, pady=2)
-
-        # Modèle
-        ttk.Label(mistral_frame, text="Modèle par défaut:").pack(anchor=tk.W, padx=10, pady=(10,0))
-        mistral_model_var = tk.StringVar(value=mistral_config.get("default_model", "mistral-large-latest"))
-        ttk.Entry(mistral_frame, textvariable=mistral_model_var, width=50).pack(padx=10, pady=2)
-
-        def save_mistral_config():
-            config = {
-                "api_key": mistral_key_var.get(),
-                "default_model": mistral_model_var.get()
-            }
-            self.ai_client.update_provider_config("mistral", config)
-            messagebox.showinfo("Succès", "Configuration Mistral sauvegardée")
-
-        ttk.Button(mistral_frame, text="Sauvegarder", command=save_mistral_config).pack(pady=20)
-
-        # Conversation
-        conv_frame = ttk.Frame(notebook)
-        notebook.add(conv_frame, text="Conversation")
-
-        ttk.Label(conv_frame, text="Gestion de la conversation", font=("TkDefaultFont", 12, "bold")).pack(pady=10)
-
-        history = self.ai_client.get_conversation_history()
-        history_info = f"Messages dans l'historique: {len(history)}"
-        ttk.Label(conv_frame, text=history_info).pack(pady=5)
-
-        def clear_conversation():
+            # Effacer l'historique pour éviter les réponses précédentes
             self.ai_client.clear_conversation()
-            messagebox.showinfo("Succès", "Historique de conversation effacé")
-            config_window.destroy()
 
-        ttk.Button(conv_frame, text="Effacer l'historique", command=clear_conversation).pack(pady=20)
+            # Créer une nouvelle boucle d'événements pour ce thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-        # Afficher l'historique
-        if history:
-            ttk.Label(conv_frame, text="Historique récent:").pack(anchor=tk.W, padx=10, pady=(10,0))
-            history_text = scrolledtext.ScrolledText(conv_frame, height=10, width=60)
-            history_text.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
+            # Exécuter l'appel asynchrone avec timeout dynamique
+            raw_result = loop.run_until_complete(self.ai_client.chat(prompt, timeout=timeout))
 
-            for i, msg in enumerate(history[-10:], 1):  # Derniers 10 messages
-                role_icon = "👤" if msg["role"] == "user" else "🤖"
-                content = msg["content"][:200] + "..." if len(msg["content"]) > 200 else msg["content"]
-                history_text.insert(tk.END, f"{i}. {role_icon} {content}\n\n")
+            # Fermer la boucle
+            loop.close()
 
-            history_text.configure(state=tk.DISABLED)
+            # Nettoyer le résultat
+            if isinstance(raw_result, dict):
+                result = raw_result.get("message", {}).get("content", "")
+            else:
+                result = str(raw_result)
 
-    def undo_operation(self):
-        """Annule la dernière opération"""
-        if not self.json_manager:
-            messagebox.showwarning("Attention", "Aucun fichier chargé")
+            result = result.strip().strip('"').strip("'")
+            return result if result else None
+
+        except asyncio.TimeoutError:
+            print(f"⏱️ Timeout lors de la traduction ({timeout}s dépassé)")
+            return None
+        except Exception as e:
+            print(f"❌ Erreur lors de la traduction: {e}")
+            return None
+
+    def _on_magic_click(self, lang: str, action: str, selection_data: dict = None, source_lang: str = "auto"):
+        """
+        Gère le clic sur la baguette magique.
+
+        Args:
+            lang: Code langue cible
+            action: "translate", "improve", "translate_selection" ou "improve_selection"
+            selection_data: Dict avec {"start": index, "end": index, "text": str} ou None
+            source_lang: Langue d'origine ("auto" pour détection automatique)
+        """
+        # Utiliser current_entry_state systématiquement
+        if not self.current_entry_state["path"] or not self.current_entry_state["entry"]:
             return
 
-        try:
-            undone_operations = self.history_manager.undo(1)
-            if undone_operations:
-                operation = undone_operations[0]
-                # Appliquer les changements annulés
-                for path, (after_value, before_value) in operation.affected_data.items():
-                    if before_value is None:
-                        # C'était une création, affichage info pour le moment
-                        self.status_var.set(f"Annulation: {path} (création)")
-                    else:
-                        try:
-                            # Temporairement désactiver le hook pour éviter la récursion
-                            old_hook = self.json_manager.operation_hook
-                            self.json_manager.operation_hook = None
-                            self.json_manager.set_value(path, before_value)
-                            self.json_manager.operation_hook = old_hook
-                        except Exception as e:
-                            messagebox.showerror("Erreur", f"Erreur lors de l'annulation de {path}: {e}")
+        # IMPORTANT: Capturer les variables IMMÉDIATEMENT pour éviter les race conditions
+        # Si on clique rapidement sur plusieurs traductions, current_entry_state peut changer
+        captured_path = self.current_entry_state["path"]
+        captured_entry = self.current_entry_state["entry"]
+        captured_lang = lang
+        captured_action = action
+        captured_selection = selection_data  # Peut être None
+        captured_source_lang = source_lang
 
-                self.populate_tree()  # Rafraîchir l'affichage
-                self.status_var.set(f"✅ Opération annulée: {operation.operation_type}")
+        original = captured_entry["ori"]
+        current_text = captured_entry[captured_lang]["text"]
+
+        # Construire le prompt à partir de la configuration
+        prompts = self.translation_config.get("prompts", {})
+
+        # Gérer les actions de sélection
+        is_selection = captured_action in ("translate_selection", "improve_selection")
+        text_to_translate = captured_selection["text"] if is_selection and captured_selection else None
+
+        # Calculer un timeout dynamique basé sur la taille du texte RÉELLEMENT ENVOYÉ
+        # Formule: timeout_base + (nb_caractères / vitesse_estimation) * marge
+        # Ollama local avec HTML: ~5 tokens/sec, avec ~4 chars/token = ~20 chars/sec (théorique)
+        # En pratique, avec HTML complexe: beaucoup plus lent
+        # Utiliser une vitesse très conservatrice de 5 chars/sec et marge x4
+        if is_selection and text_to_translate:
+            # Pour une sélection, calculer sur la taille de la sélection
+            text_length = len(text_to_translate)
+        elif captured_action in ("translate", "translate_selection"):
+            # Pour une traduction, calculer sur la taille de l'original ou de la sélection
+            text_length = len(text_to_translate) if text_to_translate else len(original)
+        else:
+            # Pour une amélioration, calculer sur l'original + texte actuel
+            text_length = len(original) + len(current_text)
+
+        estimated_time = text_length / 5  # secondes (vitesse très conservatrice)
+        captured_timeout = max(120, int(estimated_time * 4))  # minimum 120s, marge x4
+
+        # Construire la phrase de langue source
+        source_lang_phrase = ""
+        if captured_source_lang and captured_source_lang != "auto":
+            # Mapping des codes de langue vers noms complets
+            lang_names = {
+                "en": "anglais", "fr": "français", "es": "espagnol", "de": "allemand",
+                "it": "italien", "pt": "portugais", "ru": "russe", "ja": "japonais",
+                "zh": "chinois", "ko": "coréen", "ar": "arabe"
+            }
+            source_lang_name = lang_names.get(captured_source_lang, captured_source_lang)
+            source_lang_phrase = f" depuis le {source_lang_name}"
+
+        if captured_action in ("translate", "translate_selection"):
+            # Détecter si le texte contient du HTML
+            source_text = text_to_translate if is_selection else original
+            has_html = '<' in source_text and '>' in source_text
+
+            if is_selection:
+                # Pour une sélection, être TRÈS strict sur le format de réponse
+                if has_html:
+                    prompt_template = prompts.get("translate_selection_html",
+                        'Traduis UNIQUEMENT ce fragment{source_lang} en {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\nRéponds UNIQUEMENT avec la traduction du fragment, RIEN d\'autre.\n\n{text}')
+                    prompt = prompt_template.format(text=source_text, lang=captured_lang, source_lang=source_lang_phrase)
+                else:
+                    prompt_template = prompts.get("translate_selection",
+                        'Traduis UNIQUEMENT ce fragment{source_lang} en {lang}.\nRéponds UNIQUEMENT avec la traduction du fragment, sans guillemets, sans explication, RIEN d\'autre.\n\n{text}')
+                    prompt = prompt_template.format(text=source_text, lang=captured_lang, source_lang=source_lang_phrase)
             else:
-                messagebox.showinfo("Information", "Aucune opération à annuler")
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors de l'annulation: {e}")
+                # Traduction complète
+                if has_html:
+                    # Utiliser le prompt HTML de la config, ou fallback sur le défaut
+                    prompt_template = prompts.get("translate_html",
+                        'Traduis le texte suivant{source_lang} en {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\n\n{text}')
+                    prompt = prompt_template.format(text=source_text, lang=captured_lang, source_lang=source_lang_phrase)
+                else:
+                    # Utiliser le prompt simple de la config, ou fallback
+                    prompt_template = prompts.get("translate",
+                        'Traduis "{text}"{source_lang} en {lang}. Réponds uniquement avec la traduction, sans explication.')
+                    prompt = prompt_template.format(text=source_text, lang=captured_lang, source_lang=source_lang_phrase)
+        else:  # improve ou improve_selection
+            context = self._get_context_for_path(captured_path)
 
-    def redo_operation(self):
-        """Rétablit la dernière opération annulée"""
-        if not self.json_manager:
-            messagebox.showwarning("Attention", "Aucun fichier chargé")
+            if is_selection:
+                # Pour une sélection, on améliore uniquement la partie sélectionnée
+                source_text = text_to_translate
+                # On ne connaît pas l'original de la sélection, donc on ne l'inclut pas
+                has_html = '<' in source_text and '>' in source_text
+
+                if has_html:
+                    prompt_template = prompts.get("improve_selection_html",
+                        'Améliore UNIQUEMENT ce fragment de traduction{source_lang} vers {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\nRéponds UNIQUEMENT avec le fragment amélioré, RIEN d\'autre.\n\nTexte: {current}\nContexte: {context}')
+                    prompt = prompt_template.format(lang=captured_lang, current=source_text, context=context, source_lang=source_lang_phrase)
+                else:
+                    prompt_template = prompts.get("improve_selection",
+                        'Améliore UNIQUEMENT ce fragment de traduction{source_lang} vers {lang}.\nRéponds UNIQUEMENT avec le fragment amélioré, sans guillemets, sans explication, RIEN d\'autre.\n\nTexte: "{current}"\nContexte: {context}')
+                    prompt = prompt_template.format(lang=captured_lang, current=source_text, context=context, source_lang=source_lang_phrase)
+            else:
+                # Amélioration complète (comportement normal)
+                has_html = '<' in current_text and '>' in current_text
+
+                if has_html:
+                    # Utiliser le prompt amélioration HTML de la config
+                    prompt_template = prompts.get("improve_html",
+                        'Améliore cette traduction{source_lang} vers {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\n\nOriginal: {original}\nActuel: {current}\nContexte: {context}')
+                    prompt = prompt_template.format(lang=captured_lang, original=original,
+                                                   current=current_text, context=context, source_lang=source_lang_phrase)
+                else:
+                    # Utiliser le prompt amélioration simple de la config
+                    prompt_template = prompts.get("improve",
+                        'Améliore cette traduction{source_lang} vers {lang}:\nOriginal: "{original}"\nActuel: "{current}"\nContexte: {context}')
+                    prompt = prompt_template.format(lang=captured_lang, original=original,
+                                                   current=current_text, context=context, source_lang=source_lang_phrase)
+
+        # Logger le début de la traduction dans le chat avec le texte original
+        if captured_action in ("translate", "translate_selection"):
+            source_text = text_to_translate if is_selection else original
+            action_text = "Traduire sélection" if is_selection else "Traduire"
+            self.chat_panel.add_message("system", f"{captured_lang.upper()}: {action_text} → \"{source_text[:100]}{'...' if len(source_text) > 100 else ''}\" (timeout: {captured_timeout}s)")
+        else:
+            source_text = text_to_translate if is_selection else current_text
+            action_text = "Améliorer sélection" if is_selection else "Améliorer"
+            self.chat_panel.add_message("system", f"{captured_lang.upper()}: {action_text} → \"{source_text[:100]}{'...' if len(source_text) > 100 else ''}\" (timeout: {captured_timeout}s)")
+
+        # Lancer l'appel IA dans un thread séparé
+        self.status_label.config(text=f"🪄 Traduction {captured_lang} en cours... (max {captured_timeout}s)")
+        self.root.update()
+
+        def run_translation():
+            """Fonction exécutée dans un thread séparé"""
+            try:
+                # IMPORTANT: Effacer l'historique de conversation avant chaque traduction
+                # pour éviter que Ollama réutilise les réponses précédentes
+                self.ai_client.clear_conversation()
+
+                # Créer une nouvelle boucle d'événements pour ce thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # Exécuter l'appel asynchrone avec timeout dynamique
+                raw_result = loop.run_until_complete(self.ai_client.chat(prompt, timeout=captured_timeout))
+                # Sauvegarder la réponse brute (retourné par l'IA)
+                returned_by_ai = raw_result.strip()
+
+                result = returned_by_ai.strip('"').strip("'")
+
+                # Pour les sélections, vérifier que le résultat n'est pas trop long
+                if is_selection and text_to_translate:
+                    original_length = len(text_to_translate)
+                    result_length = len(result)
+
+                    # Ratio de tolérance : une traduction peut être jusqu'à 2x plus longue
+                    # (certaines langues comme le français sont plus verbeuses)
+                    max_acceptable_length = original_length * 2.5
+
+                    if result_length > max_acceptable_length:
+                        # Le résultat semble contenir du texte supplémentaire
+                        # Essayer de nettoyer en cherchant des motifs communs
+
+                        # Motif : "Traduction : xxxx" ou "Voici la traduction : xxxx"
+                        patterns = [
+                            r'^.*?[Tt]raduction\s*:?\s*(.+)$',
+                            r'^.*?[Vv]oici\s*:?\s*(.+)$',
+                            r'^.*?[Rr]ésultat\s*:?\s*(.+)$',
+                        ]
+
+                        cleaned = result
+                        for pattern in patterns:
+                            match = re.search(pattern, result, re.DOTALL)
+                            if match:
+                                cleaned = match.group(1).strip().strip('"').strip("'")
+                                break
+
+                        # Si après nettoyage c'est encore trop long, tronquer avec avertissement
+                        if len(cleaned) > max_acceptable_length:
+                            # Logger un avertissement dans le chat
+                            warning_msg = f"⚠️ Résultat trop long ({len(result)} car. pour {original_length} car. originaux). Utilisation du résultat tel quel - vérifiez manuellement."
+                            self.root.after(0, lambda msg=warning_msg: self.chat_panel.add_message("system", msg))
+                            result = cleaned  # Utiliser le résultat nettoyé même s'il est long
+                        else:
+                            result = cleaned
+
+                # Fermer la boucle
+                loop.close()
+
+                # Déterminer le texte envoyé à l'IA
+                sent_to_ai = text_to_translate if is_selection and text_to_translate else (original if captured_action in ("translate", "translate_selection") else current_text)
+
+                # Mettre à jour l'UI dans le thread principal
+                # Utiliser les variables capturées (pas les variables de _on_magic_click qui peuvent changer!)
+                # Passer : path, lang, result (texte retenu), action, selection_data, sent_to_ai, returned_by_ai, prompt (pour debug)
+                self.root.after(0, lambda p=captured_path, l=captured_lang, kept=result, a=captured_action, s=captured_selection, sent=sent_to_ai, ret=returned_by_ai, pr=prompt:
+                              self._on_translation_success(p, l, kept, a, s, sent, ret, pr))
+
+            except Exception as ex:
+                # Capturer l'erreur dans une variable locale
+                error_msg = str(ex)
+                # Afficher l'erreur dans le thread principal
+                self.root.after(0, lambda msg=error_msg: self._on_translation_error(msg))
+
+        # Lancer le thread
+        thread = threading.Thread(target=run_translation, daemon=True)
+        thread.start()
+
+    def _on_deepl_click(self, lang: str, action: str, selection_data: dict = None, source_lang: str = "auto"):
+        """
+        Gère le clic sur le bouton DeepL.
+
+        Args:
+            lang: Code langue cible
+            action: "translate", "improve", "translate_selection" ou "improve_selection"
+            selection_data: Dict avec {"start": index, "end": index, "text": str} ou None
+            source_lang: Langue d'origine ("auto" pour détection automatique)
+        """
+        # Vérifier si DeepL est activé dans la configuration
+        deepl_config = self.translation_config.get("ai_config", {}).get("deepl", {})
+        deepl_enabled = deepl_config.get("enabled", False)
+
+        if not deepl_enabled:
+            messagebox.showwarning("DeepL désactivé",
+                                 "DeepL n'est pas activé. Veuillez l'activer dans Options > Configuration IA.")
             return
 
+        api_key = deepl_config.get("api_key", "")
+        if not api_key:
+            messagebox.showwarning("Clé API manquante",
+                                 "Clé API DeepL non configurée. Veuillez la configurer dans Options > Configuration IA.")
+            return
+
+        # Utiliser current_entry_state systématiquement
+        if not self.current_entry_state["path"] or not self.current_entry_state["entry"]:
+            return
+
+        # IMPORTANT: Capturer les variables IMMÉDIATEMENT
+        captured_path = self.current_entry_state["path"]
+        captured_entry = self.current_entry_state["entry"]
+        captured_lang = lang
+        captured_action = action
+        captured_selection = selection_data
+        captured_source_lang = source_lang
+
+        original = captured_entry["ori"]
+        current_text = captured_entry[captured_lang]["text"]
+
+        # Gérer les actions de sélection
+        is_selection = captured_action in ("translate_selection", "improve_selection")
+        text_to_translate = captured_selection["text"] if is_selection and captured_selection else None
+
+        # Pour DeepL, on ne fait que de la traduction (pas d'amélioration comme avec les LLM)
+        # Si l'action est "improve", on re-traduit simplement le texte actuel
+        if is_selection and text_to_translate:
+            source_text = text_to_translate
+        elif captured_action in ("translate", "translate_selection"):
+            source_text = text_to_translate if is_selection else original
+        else:  # improve ou improve_selection
+            source_text = text_to_translate if is_selection else current_text
+
+        # Timeout pour DeepL (plus court car c'est une API rapide)
+        timeout = 30
+
+        # Logger le début de la traduction
+        self.chat_panel.add_message("system",
+            f"DeepL {captured_lang.upper()}: Traduction → \"{source_text[:100]}{'...' if len(source_text) > 100 else ''}\"")
+
+        # Lancer l'appel DeepL dans un thread séparé
+        self.status_label.config(text=f"🌐 Traduction DeepL {captured_lang} en cours...")
+        self.root.update()
+
+        def run_deepl_translation():
+            """Fonction exécutée dans un thread séparé"""
+            try:
+                # Utiliser l'instance globale de DeepL pour le comptage
+                # Si disponible, sinon créer une instance locale
+                if "deepl" in self.ai_client.providers:
+                    deepl_provider = self.ai_client.providers["deepl"]
+                else:
+                    # Fallback : créer une instance locale (ne comptera pas dans le total)
+                    from core.ai_client import DeepLProvider
+                    deepl_provider = DeepLProvider({
+                        "api_key": api_key,
+                        "is_pro": deepl_config.get("is_pro", False),
+                        "timeout": timeout
+                    })
+
+                # Mapper le code langue pour DeepL
+                # DeepL utilise des codes en majuscules avec tiret (ex: EN-US, FR, ES)
+                deepl_lang_map = {
+                    "en": "EN-US",
+                    "fr": "FR",
+                    "es": "ES",
+                    "de": "DE",
+                    "it": "IT",
+                    "pt": "PT-BR",
+                    "ru": "RU",
+                    "ja": "JA",
+                    "zh": "ZH",
+                    "ko": "KO",
+                    "ar": "AR"
+                }
+                target_lang_deepl = deepl_lang_map.get(captured_lang, captured_lang.upper())
+
+                # Mapper la langue source si spécifiée
+                source_lang_deepl = None
+                if captured_source_lang and captured_source_lang != "auto":
+                    source_lang_deepl = deepl_lang_map.get(captured_source_lang, captured_source_lang.upper())
+
+                # Créer une boucle d'événements pour ce thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # Appeler DeepL avec timeout
+                result = loop.run_until_complete(
+                    deepl_provider.translate(source_text, target_lang_deepl, source_lang_deepl, timeout)
+                )
+
+                # Fermer la boucle
+                loop.close()
+
+                # Nettoyer le résultat
+                result = result.strip() if result else ""
+
+                if not result:
+                    raise Exception("Traduction vide reçue de DeepL")
+
+                # Mettre à jour l'UI dans le thread principal
+                self.root.after(0, lambda p=captured_path, l=captured_lang, kept=result, a=captured_action,
+                              s=captured_selection, sent=source_text, ret=result:
+                              self._on_translation_success(p, l, kept, a, s, sent, ret, f"DeepL: {source_text} -> {target_lang_deepl}"))
+
+            except Exception as ex:
+                error_msg = str(ex)
+                self.root.after(0, lambda msg=error_msg: self._on_translation_error(msg))
+
+        # Lancer le thread
+        thread = threading.Thread(target=run_deepl_translation, daemon=True)
+        thread.start()
+
+    def _on_translation_success(self, path: str, lang: str, kept_text: str, action: str,
+                               selection_data: dict = None, sent_text: str = None,
+                               returned_text: str = None, full_prompt: str = None):
+        """
+        Callback appelé après succès de la traduction (dans le thread principal).
+
+        Args:
+            path: Chemin de l'entrée
+            lang: Code langue
+            kept_text: Texte retenu/inséré dans le champ
+            action: Action effectuée
+            selection_data: Données de sélection (None si traduction complète)
+            sent_text: Texte envoyé à l'IA
+            returned_text: Réponse brute de l'IA
+            full_prompt: Prompt complet (pour debug)
+        """
         try:
-            redone_operations = self.history_manager.redo(1)
-            if redone_operations:
-                operation = redone_operations[0]
-                # Appliquer les changements rétablis
-                for path, (before_value, after_value) in operation.affected_data.items():
-                    try:
-                        # Temporairement désactiver le hook pour éviter la récursion
-                        old_hook = self.json_manager.operation_hook
-                        self.json_manager.operation_hook = None
-                        self.json_manager.set_value(path, after_value)
-                        self.json_manager.operation_hook = old_hook
-                    except Exception as e:
-                        messagebox.showerror("Erreur", f"Erreur lors du rétablissement de {path}: {e}")
+            is_selection = action in ("translate_selection", "improve_selection")
 
-                self.populate_tree()  # Rafraîchir l'affichage
-                self.status_var.set(f"✅ Opération rétablie: {operation.operation_type}")
+            if is_selection and selection_data:
+                # Traduction partielle : remplacer uniquement la sélection
+                # Récupérer l'entrée actuelle
+                current_entry = self.got_manager._get_entry_by_path(path)
+                current_text_before = current_entry[lang]["text"]
+
+                # Construire le nouveau texte en remplaçant la sélection
+                # Utiliser les index de sélection pour remplacer
+                text_widget = self.translation_form.text_widgets.get(lang)
+                if text_widget:
+                    # Obtenir les positions actuelles
+                    start_idx = selection_data["start"]
+                    end_idx = selection_data["end"]
+
+                    # Construire le nouveau texte
+                    text_before = text_widget.get("1.0", start_idx)
+                    text_after = text_widget.get(end_idx, "end-1c")
+                    new_full_text = text_before + kept_text + text_after
+
+                    # Mettre à jour dans got_manager (gère automatiquement l'historique)
+                    self.got_manager.update_translation(path, lang, new_full_text)
+                    updated_entry = self.got_manager._get_entry_by_path(path)
+                    self._mark_as_modified()
+                else:
+                    # Fallback : mettre à jour le texte complet
+                    self.got_manager.update_translation(path, lang, kept_text)
+                    updated_entry = self.got_manager._get_entry_by_path(path)
+                    self._mark_as_modified()
             else:
-                messagebox.showinfo("Information", "Aucune opération à rétablir")
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors du rétablissement: {e}")
+                # Traduction complète : comportement normal
+                self.got_manager.update_translation(path, lang, kept_text)
+                updated_entry = self.got_manager._get_entry_by_path(path)
+                self._mark_as_modified()
 
-    def show_history(self):
-        """Affiche l'historique des opérations dans une fenêtre"""
-        history_window = tk.Toplevel(self.root)
-        history_window.title("Historique des opérations")
-        history_window.geometry("800x600")
+            # Mettre à jour les couleurs de l'arbre
+            self._update_tree_colors(path)
 
-        # Frame principal
-        main_frame = ttk.Frame(history_window)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            # Log dans le chat avec informations Envoyé/Retourné/Retenu
+            validated = updated_entry[lang]["valid"]
 
-        # Titre
-        ttk.Label(main_frame, text="📚 Historique des opérations", font=("Arial", 14, "bold")).pack(pady=(0, 10))
+            # Passer le prompt complet si en mode debug
+            debug_prompt = full_prompt if self.debug_mode else None
 
-        # Treeview pour l'historique
-        columns = ("Position", "Timestamp", "Type", "Provider", "Affectés")
-        history_tree = ttk.Treeview(main_frame, columns=columns, show="headings", height=15)
-
-        # Configuration des colonnes
-        history_tree.heading("Position", text="Pos")
-        history_tree.heading("Timestamp", text="Heure")
-        history_tree.heading("Type", text="Type d'opération")
-        history_tree.heading("Provider", text="Provider")
-        history_tree.heading("Affectés", text="Éléments affectés")
-
-        history_tree.column("Position", width=50)
-        history_tree.column("Timestamp", width=150)
-        history_tree.column("Type", width=150)
-        history_tree.column("Provider", width=100)
-        history_tree.column("Affectés", width=120)
-
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=history_tree.yview)
-        history_tree.configure(yscrollcommand=scrollbar.set)
-
-        # Pack treeview et scrollbar
-        history_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Remplir avec les données
-        operations = self.history_manager.get_operations_list()
-        current_pos = self.history_manager.get_current_position()
-
-        for i, operation in enumerate(operations):
-            marker = "➤" if i == current_pos else ""
-            values = (
-                f"{marker} {i}",
-                operation.timestamp[:16],
-                operation.operation_type,
-                operation.provider_info.get('provider_name', 'N/A'),
-                f"{len(operation.affected_data)} éléments"
+            self.chat_panel.add_magic_action(
+                lang=lang,
+                action=action,
+                sent_text=sent_text or "",
+                returned_text=returned_text or "",
+                kept_text=kept_text,
+                validated=validated,
+                full_prompt=debug_prompt
             )
 
-            item_id = history_tree.insert("", tk.END, values=values)
-            if i == current_pos:
-                history_tree.set(item_id, "Position", f"➤ {i}")
+            # Vérifier avec current_entry_state pour savoir si on doit rafraîchir
+            if self.current_entry_state["path"] == path:
+                # C'est toujours la même entrée - mettre à jour current_entry_state
+                self.current_entry_state["entry"] = updated_entry
 
-        # Frame pour les boutons
-        button_frame = ttk.Frame(history_window)
-        button_frame.pack(fill=tk.X, padx=10, pady=(10, 0))
+                # Mettre à jour le formulaire directement
+                self.translation_form.current_entry = updated_entry
+                self.translation_form.update_language_data(lang)
 
-        def jump_to_operation():
-            selection = history_tree.selection()
-            if selection:
-                item = history_tree.item(selection[0])
-                pos_text = item['values'][0]
+                self.status_label.config(text="✓ Traduction terminée")
+            else:
+                # L'utilisateur a changé de sélection pendant la traduction
+                self.status_label.config(text=f"✓ Traduction terminée pour {path}")
+
+        except Exception as e:
+            self._on_translation_error(str(e))
+
+    def _on_translation_error(self, error_message: str):
+        """
+        Callback appelé en cas d'erreur de traduction (dans le thread principal).
+        """
+        messagebox.showerror("Erreur IA", f"Erreur lors de l'appel IA: {error_message}")
+        self.chat_panel.add_error(error_message)
+        self.status_label.config(text="❌ Erreur de traduction")
+
+    def _on_validate(self, lang: str, valid: bool):
+        """Gère le changement de validation."""
+        if not self.current_entry_state["path"]:
+            return
+
+        path = self.current_entry_state["path"]
+        self.got_manager.validate_translation(path, lang, valid)
+        self._mark_as_modified()
+
+        # Mettre à jour current_entry_state
+        self.current_entry_state["entry"] = self.got_manager._get_entry_by_path(path)
+
+        # Mettre à jour l'entrée dans le formulaire
+        self.translation_form.current_entry = self.current_entry_state["entry"]
+
+        # Mettre à jour les couleurs
+        self._update_tree_colors(path)
+
+        # Log dans le chat
+        self.chat_panel.add_validation_change(lang, valid)
+
+    def _on_rollback(self, lang: str):
+        """Gère le retour arrière."""
+        if not self.current_entry_state["path"]:
+            return
+
+        path = self.current_entry_state["path"]
+        restored = self.got_manager.rollback_translation(path, lang)
+
+        if restored:
+            # Mettre à jour current_entry_state
+            self.current_entry_state["entry"] = self.got_manager._get_entry_by_path(path)
+
+            # Rafraîchir l'entrée et le formulaire
+            self.translation_form.current_entry = self.current_entry_state["entry"]
+            self.translation_form.update_language_data(lang)
+
+            # Mettre à jour les couleurs
+            self._update_tree_colors(path)
+
+            # Log dans le chat
+            self.chat_panel.add_rollback(lang, restored)
+
+    def _undo_all_languages(self):
+        """Annule la dernière traduction pour toutes les langues du champ actuel."""
+        if not self.current_entry_state["path"]:
+            messagebox.showinfo("Aucune sélection", "Veuillez sélectionner un champ à annuler.")
+            return
+
+        path = self.current_entry_state["path"]
+        entry = self.current_entry_state["entry"]
+
+        if not isinstance(entry, dict) or "ori" not in entry:
+            messagebox.showwarning("Non traduisible", "Ce champ n'est pas traduisible.")
+            return
+
+        # Compter combien de langues ont un historique
+        languages_with_history = []
+        for lang in self.got_manager.target_languages:
+            if lang in entry and len(entry[lang]["history"]) > 0:
+                languages_with_history.append(lang)
+
+        if not languages_with_history:
+            messagebox.showinfo("Pas d'historique", "Aucune langue n'a d'historique à annuler.")
+            return
+
+        # Confirmer l'action
+        langs_str = ", ".join(languages_with_history)
+        if not messagebox.askyesno("Confirmer l'annulation",
+                                   f"Annuler la dernière traduction pour: {langs_str}?"):
+            return
+
+        # Annuler pour chaque langue
+        for lang in languages_with_history:
+            restored = self.got_manager.rollback_translation(path, lang)
+            if restored:
+                self.chat_panel.add_rollback(lang, restored)
+
+        # Rafraîchir le formulaire
+        self.translation_form.load_entry(path)
+        self._update_tree_colors(path)
+
+        messagebox.showinfo("Annulation réussie",
+                           f"Annulé pour {len(languages_with_history)} langue(s).")
+
+    def _on_manual_edit(self, lang: str, new_text: str):
+        """Gère l'édition manuelle."""
+        if not self.current_entry_state["path"]:
+            return
+
+        path = self.current_entry_state["path"]
+
+        # Mettre à jour avec historique
+        self.got_manager.update_translation(path, lang, new_text)
+        self._mark_as_modified()
+
+        # Mettre à jour current_entry_state
+        self.current_entry_state["entry"] = self.got_manager._get_entry_by_path(path)
+
+    def _on_batch_deepl_translate(self, lang: str, selected_paths: list):
+        """
+        Gère la traduction DeepL par lot d'un sous-arbre.
+
+        Args:
+            lang: Code langue cible
+            selected_paths: Liste des chemins sélectionnés
+        """
+        if not selected_paths:
+            messagebox.showinfo("Aucune feuille sélectionnée",
+                              "Veuillez sélectionner au moins une feuille à traduire.")
+            return
+
+        # Vérifier si DeepL est configuré
+        deepl_config = self.translation_config.get("ai_config", {}).get("deepl", {})
+        deepl_enabled = deepl_config.get("enabled", False)
+
+        if not deepl_enabled:
+            messagebox.showwarning("DeepL désactivé",
+                                 "DeepL n'est pas activé. Veuillez l'activer dans Options > Configuration IA.")
+            return
+
+        api_key = deepl_config.get("api_key", "")
+        if not api_key:
+            messagebox.showwarning("Clé API manquante",
+                                 "Clé API DeepL non configurée. Veuillez la configurer dans Options > Configuration IA.")
+            return
+
+        # Démarrer le traitement
+        self.batch_form.start_processing(len(selected_paths))
+
+        # Sauvegarder le chemin de la branche pour la resélectionner après
+        branch_path = self.current_entry_state.get("path", "")
+
+        # Lancer le traitement dans un thread pour ne pas bloquer l'interface
+        import threading
+
+        def batch_process_deepl():
+            """Traite toutes les feuilles une par une avec DeepL."""
+            for i, leaf_path in enumerate(selected_paths):
+                # Vérifier si l'utilisateur a demandé l'arrêt
+                if self.batch_form.is_stopped():
+                    self.root.after(0, lambda: self.batch_form.finish_processing(success=False))
+                    return
+
+                # Mettre à jour la progression (dans le thread principal)
+                self.root.after(0, lambda curr=i, tot=len(selected_paths), p=leaf_path:
+                                self.batch_form.update_progress(curr, tot, p))
+
                 try:
-                    pos = int(pos_text.replace("➤", "").strip())
-                    self.history_manager.jump_to_position(pos)
-                    messagebox.showinfo("Succès", f"Position {pos} atteinte")
-                    history_window.destroy()
-                    self.populate_tree()  # Rafraîchir l'affichage
-                except:
-                    messagebox.showerror("Erreur", "Position invalide")
+                    # Récupérer l'entrée
+                    entry = self.got_manager._get_entry_by_path(leaf_path)
 
-        ttk.Button(button_frame, text="Aller à cette position", command=jump_to_operation).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Fermer", command=history_window.destroy).pack(side=tk.RIGHT, padx=5)
+                    # Vérifier si c'est bien une entrée traduisible
+                    if not isinstance(entry, dict) or "ori" not in entry:
+                        continue
+
+                    # Vérifier si la traduction existe et est non vide, OU si elle est validée
+                    skip_translation = False
+                    if lang in entry:
+                        lang_data = entry[lang]
+                        if isinstance(lang_data, dict):
+                            translation_text = lang_data.get("text", "")
+                            is_validated = lang_data.get("valid", False)
+
+                            # Sauter si : (1) texte validé (ne JAMAIS retraduire), OU (2) texte non vide
+                            # IMPORTANT : Les traductions validées ne doivent JAMAIS être retraduits
+                            if is_validated:
+                                # Traduction validée : ne jamais retraduire
+                                skip_translation = True
+                            elif translation_text and translation_text.strip():
+                                # Traduction non validée mais présente : passer pour l'instant
+                                # (ne traduire que les champs vides)
+                                skip_translation = True
+                        elif isinstance(lang_data, str):
+                            # Ancien format : traduction directe en string
+                            if lang_data.strip():
+                                skip_translation = True
+
+                    if skip_translation:
+                        continue
+
+                    # Pas de traduction -> Traduire avec DeepL
+                    original = entry.get("ori", "")
+                    if not original or not original.strip():
+                        continue  # Pas d'original, rien à traduire
+
+                    # Traduire avec DeepL en utilisant l'instance globale pour le comptage
+                    # Utiliser self.ai_client.providers["deepl"] si disponible, sinon créer une instance locale
+                    if "deepl" in self.ai_client.providers:
+                        deepl_provider = self.ai_client.providers["deepl"]
+                    else:
+                        # Fallback : créer une instance locale (ne comptera pas dans le total)
+                        from core.ai_client import DeepLProvider
+                        deepl_provider = DeepLProvider({
+                            "api_key": api_key,
+                            "is_pro": deepl_config.get("is_pro", False),
+                            "timeout": 30
+                        })
+
+                    # Mapper le code langue pour DeepL
+                    deepl_lang_map = {
+                        "en": "EN-US",
+                        "fr": "FR",
+                        "es": "ES",
+                        "de": "DE",
+                        "it": "IT",
+                        "pt": "PT-BR",
+                        "ru": "RU",
+                        "ja": "JA",
+                        "zh": "ZH",
+                        "ko": "KO",
+                        "ar": "AR"
+                    }
+                    target_lang_deepl = deepl_lang_map.get(lang, lang.upper())
+
+                    # Créer une boucle d'événements pour ce thread
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
+                    # Appeler DeepL avec timeout
+                    translated_text = loop.run_until_complete(
+                        deepl_provider.translate(original, target_lang_deepl, "auto", 30)
+                    )
+
+                    # Fermer la boucle
+                    loop.close()
+
+                    # Mettre à jour la traduction si on a un résultat
+                    if translated_text:
+                        self.got_manager.update_translation(leaf_path, lang, translated_text)
+                        # Marquer comme modifié (dans le thread principal)
+                        self.root.after(0, self._mark_as_modified)
+                    else:
+                        # Erreur - on laisse vide
+                        print(f"⚠️ Pas de traduction pour {leaf_path}")
+
+                except Exception as e:
+                    import traceback
+                    print(f"Erreur lors de la traduction de {leaf_path}:")
+                    print(f"  Type: {type(e).__name__}")
+                    print(f"  Message: {e}")
+                    print(f"  Traceback: {traceback.format_exc()}")
+                    # Continuer avec la feuille suivante
+
+            # Traitement terminé
+            self.root.after(0, lambda: self.batch_form.finish_processing(success=True))
+            self.root.after(0, self._populate_tree)
+            # Resélectionner la branche après le rafraîchissement
+            if branch_path:
+                self.root.after(100, lambda: self._select_path_in_tree(branch_path))
+
+        # Lancer le thread
+        thread = threading.Thread(target=batch_process_deepl, daemon=True)
+        thread.start()
+
+    def _on_batch_translate(self, lang: str, selected_paths: list):
+        """
+        Gère la traduction par lot d'un sous-arbre.
+
+        Args:
+            lang: Code langue cible
+            selected_paths: Liste des chemins sélectionnés
+        """
+        if not selected_paths:
+            messagebox.showinfo("Aucune feuille sélectionnée",
+                              "Veuillez sélectionner au moins une feuille à traduire.")
+            return
+
+        # Démarrer le traitement
+        self.batch_form.start_processing(len(selected_paths))
+
+        # Sauvegarder le chemin de la branche pour la resélectionner après
+        branch_path = self.current_entry_state.get("path", "")
+
+        # Lancer le traitement dans un thread pour ne pas bloquer l'interface
+        import threading
+
+        def batch_process():
+            """Traite toutes les feuilles une par une."""
+            for i, leaf_path in enumerate(selected_paths):
+                # Vérifier si l'utilisateur a demandé l'arrêt
+                if self.batch_form.is_stopped():
+                    self.root.after(0, lambda: self.batch_form.finish_processing(success=False))
+                    return
+
+                # Mettre à jour la progression (dans le thread principal)
+                self.root.after(0, lambda curr=i, tot=len(selected_paths), p=leaf_path:
+                                self.batch_form.update_progress(curr, tot, p))
+
+                try:
+                    # Récupérer l'entrée
+                    entry = self.got_manager._get_entry_by_path(leaf_path)
+
+                    # Vérifier si c'est bien une entrée traduisible
+                    if not isinstance(entry, dict) or "ori" not in entry:
+                        continue
+
+                    # Vérifier si la traduction existe et est non vide, OU si elle est validée
+                    skip_translation = False
+                    if lang in entry:
+                        lang_data = entry[lang]
+                        if isinstance(lang_data, dict):
+                            translation_text = lang_data.get("text", "")
+                            is_validated = lang_data.get("valid", False)
+
+                            # Sauter si : (1) texte validé (ne JAMAIS retraduire), OU (2) texte non vide
+                            # IMPORTANT : Les traductions validées ne doivent JAMAIS être retraduits
+                            if is_validated:
+                                # Traduction validée : ne jamais retraduire
+                                skip_translation = True
+                            elif translation_text and translation_text.strip():
+                                # Traduction non validée mais présente : passer pour l'instant
+                                # (ne traduire que les champs vides)
+                                skip_translation = True
+                        elif isinstance(lang_data, str):
+                            # Ancien format : traduction directe en string
+                            if lang_data.strip():
+                                skip_translation = True
+
+                    if skip_translation:
+                        continue
+
+                    # Pas de traduction -> Traduire
+                    original = entry.get("ori", "")
+                    if not original or not original.strip():
+                        continue  # Pas d'original, rien à traduire
+
+                    # Utiliser la méthode factorisée qui gère timeout et tout
+                    translated_text = self._translate_text(original, lang, source_lang="auto")
+
+                    # Mettre à jour la traduction si on a un résultat
+                    if translated_text:
+                        self.got_manager.update_translation(leaf_path, lang, translated_text)
+                        # Marquer comme modifié (dans le thread principal)
+                        self.root.after(0, self._mark_as_modified)
+                    else:
+                        # Timeout ou erreur - on laisse vide comme demandé
+                        print(f"⚠️ Pas de traduction pour {leaf_path} (timeout ou erreur)")
+
+                except Exception as e:
+                    import traceback
+                    print(f"Erreur lors de la traduction de {leaf_path}:")
+                    print(f"  Type: {type(e).__name__}")
+                    print(f"  Message: {e}")
+                    print(f"  Traceback: {traceback.format_exc()}")
+                    # Continuer avec la feuille suivante
+
+            # Traitement terminé
+            self.root.after(0, lambda: self.batch_form.finish_processing(success=True))
+            self.root.after(0, self._populate_tree)
+            # Resélectionner la branche après le rafraîchissement
+            if branch_path:
+                self.root.after(100, lambda: self._select_path_in_tree(branch_path))
+
+        # Lancer le thread
+        thread = threading.Thread(target=batch_process, daemon=True)
+        thread.start()
+
+    def _on_user_chat_message(self, message: str):
+        """
+        Gère les messages utilisateur dans le chat.
+
+        Supporte les commandes console avec "/" :
+        - /cd <path> : Change le chemin actuel et sélectionne dans l'arbre
+        - /ia <message> : Dialogue avec l'IA (commande par défaut)
+        - /set, /show, /load, etc. : Commandes internes du provider
+
+        Si pas de "/" au début, traite comme "/ia <message>"
+
+        Args:
+            message: Message de l'utilisateur
+        """
+        # Détecter les commandes (commencent par "/")
+        if message.startswith("/"):
+            # Parser la commande
+            parts = message.split(None, 1)  # Séparer au premier espace
+            command = parts[0][1:].lower()  # Enlever le "/" et mettre en minuscules
+            args = parts[1] if len(parts) > 1 else ""
+
+            # Router vers le bon handler
+            if command == "cd":
+                self._handle_cd_command(args)
+            elif command == "ia":
+                # Dialogue avec l'IA
+                self._handle_ia_command(args)
+            else:
+                # Commande interne du provider (/set, /show, /load, /clear, etc.)
+                self._handle_internal_command(message)
+        else:
+            # Pas de "/" : traiter comme "/ia <message>"
+            self._handle_ia_command(message)
+
+    def _select_path_in_tree(self, path: str) -> bool:
+        """
+        Sélectionne un chemin dans l'arbre.
+
+        Args:
+            path: Chemin à sélectionner (ex: "app/title")
+
+        Returns:
+            True si la sélection a réussi, False sinon
+        """
+        if not path or not self.got_manager:
+            return False
+
+        # Nettoyer le chemin (enlever le "/" initial si présent)
+        path = path.strip()
+        if path.startswith("/"):
+            path = path[1:]
+
+        # Vérifier si le chemin existe
+        try:
+            entry = self.got_manager._get_entry_by_path(path)
+
+            # Le chemin existe, trouver l'item correspondant dans l'arbre
+            tree_item = self.path_to_tree_item.get(path)
+
+            if tree_item:
+                # Sélectionner l'item dans l'arbre
+                self.tree.selection_set(tree_item)
+                self.tree.see(tree_item)  # Scroll pour rendre visible
+
+                # La sélection déclenchera automatiquement _on_tree_select
+                # qui mettra à jour le formulaire et le contexte
+                return True
+            else:
+                return False
+
+        except (KeyError, ValueError):
+            return False
+
+    def _handle_cd_command(self, path: str):
+        """
+        Gère la commande /cd pour naviguer dans l'arbre.
+
+        Args:
+            path: Chemin de destination (ex: "app/title" ou "/app/title")
+        """
+        if not path:
+            # Afficher le chemin actuel
+            current = self.current_entry_state["path"] or "(aucun)"
+            self.chat_panel.add_message("system", f"📍 Chemin actuel: {current}")
+            return
+
+        if not self.got_manager:
+            self.chat_panel.add_error("Aucun fichier chargé")
+            return
+
+        # Utiliser la méthode _select_path_in_tree
+        success = self._select_path_in_tree(path)
+
+        if success:
+            self.chat_panel.add_message("system", f"✓ Navigué vers: {path}")
+        else:
+            self.chat_panel.add_error(f"Chemin invalide ou item non trouvé: {path}")
+
+    def _handle_ia_command(self, message: str):
+        """
+        Gère le dialogue avec l'IA (/ia ou message direct).
+
+        Args:
+            message: Message pour l'IA
+        """
+        if not message.strip():
+            self.chat_panel.add_error("Message vide pour l'IA")
+            return
+
+        # Afficher un message de traitement
+        self.chat_panel.add_message("system", "💭 Réflexion en cours...")
+        self.status_label.config(text="💬 Dialogue avec l'IA...")
+        self.root.update()
+
+        def run_chat():
+            """Fonction exécutée dans un thread séparé pour le dialogue"""
+            try:
+                # Créer une nouvelle boucle d'événements pour ce thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # Appeler l'IA avec le message de l'utilisateur
+                # Timeout plus court pour le dialogue (60 secondes)
+                result = loop.run_until_complete(self.ai_client.chat(message, timeout=60))
+                result = result.strip()
+
+                # Fermer la boucle
+                loop.close()
+
+                # Afficher la réponse dans le chat (dans le thread principal)
+                self.root.after(0, lambda r=result: self._on_chat_response_success(r))
+
+            except Exception as ex:
+                error_msg = str(ex)
+                self.root.after(0, lambda msg=error_msg: self._on_chat_response_error(msg))
+
+        # Lancer le thread
+        thread = threading.Thread(target=run_chat, daemon=True)
+        thread.start()
+
+    def _handle_internal_command(self, command: str):
+        """
+        Gère les commandes internes du provider (/set, /show, /load, etc.).
+
+        Args:
+            command: Commande complète avec "/"
+        """
+        # Afficher un message de traitement
+        self.chat_panel.add_message("system", f"🔧 Exécution: {command}")
+        self.status_label.config(text=f"🔧 Commande: {command}")
+        self.root.update()
+
+        def run_command():
+            """Fonction exécutée dans un thread séparé"""
+            try:
+                # Créer une nouvelle boucle d'événements pour ce thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # Exécuter la commande interne
+                result = loop.run_until_complete(self.ai_client.execute_internal_command(command))
+
+                # Fermer la boucle
+                loop.close()
+
+                # Afficher la réponse dans le chat
+                self.root.after(0, lambda r=result: self._on_command_response_success(r))
+
+            except Exception as ex:
+                error_msg = str(ex)
+                self.root.after(0, lambda msg=error_msg: self._on_chat_response_error(msg))
+
+        # Lancer le thread
+        thread = threading.Thread(target=run_command, daemon=True)
+        thread.start()
+
+    def _on_command_response_success(self, response: str):
+        """
+        Affiche la réponse d'une commande interne.
+
+        Args:
+            response: Réponse de la commande
+        """
+        self.chat_panel.add_message("system", response)
+        self.status_label.config(text="✓ Commande exécutée")
+
+    def _on_chat_response_success(self, response: str):
+        """
+        Affiche la réponse de l'IA dans le chat.
+
+        Args:
+            response: Réponse de l'IA
+        """
+        self.chat_panel.add_message("assistant", response)
+        self.status_label.config(text="✓ Réponse reçue")
+
+    def _on_chat_response_error(self, error_message: str):
+        """
+        Affiche une erreur de dialogue dans le chat.
+
+        Args:
+            error_message: Message d'erreur
+        """
+        self.chat_panel.add_error(f"Erreur de dialogue: {error_message}")
+        self.status_label.config(text="❌ Erreur de dialogue")
+
+        # Rafraîchir l'entrée dans le formulaire
+        self.translation_form.current_entry = self.current_entry_state["entry"]
+
+        # Mettre à jour les couleurs
+        self._update_tree_colors(path)
+
+        # Log dans le chat
+        self.chat_panel.add_manual_edit(lang, new_text)
+
+    def _update_tree_colors(self, path: str):
+        """Met à jour les couleurs de l'arbre pour un chemin et ses parents."""
+        item = self.path_to_tree_item.get(path)
+        if not item:
+            return
+
+        # Obtenir l'état de validation
+        state = self.got_manager.get_validation_state(path)
+
+        # Mettre à jour l'icône et la couleur
+        current_text = self.tree.item(item, "text")
+        # Extraire le nom sans l'icône
+        parts = current_text.split(" ", 1)
+        name = parts[1] if len(parts) > 1 else parts[0]
+
+        icon = self._get_icon_for_state(state)
+        self.tree.item(item, text=f"{icon} {name}", tags=(state,))
+
+        # Propager la couleur aux parents
+        self._propagate_colors_to_parents(path)
+
+    def _update_all_parent_colors(self):
+        """
+        Met à jour les couleurs de tous les nœuds parents lors du chargement initial.
+        """
+        # Obtenir tous les chemins uniques des parents
+        all_paths = list(self.path_to_tree_item.keys())
+        parent_paths = set()
+
+        for path in all_paths:
+            parts = path.split("/")
+            # Ajouter tous les chemins parents
+            for i in range(1, len(parts)):
+                parent_path = "/".join(parts[:i])
+                parent_paths.add(parent_path)
+
+        # Trier par profondeur (du plus profond au plus haut) pour mettre à jour correctement
+        sorted_parents = sorted(parent_paths, key=lambda p: p.count("/"), reverse=True)
+
+        # Mettre à jour chaque parent
+        for parent_path in sorted_parents:
+            parent_item = self.path_to_tree_item.get(parent_path)
+            if not parent_item:
+                continue
+
+            parent_state = self._calculate_parent_state(parent_path)
+            if parent_state == "none":
+                continue
+
+            # Mettre à jour la couleur
+            current_text = self.tree.item(parent_item, "text")
+            if current_text.startswith(("📁", "📄", "✅", "🟠", "❌", "⚪")):
+                parts = current_text.split(" ", 1)
+                name = parts[1] if len(parts) > 1 else parts[0]
+            else:
+                name = current_text
+
+            icon = "📁"
+            self.tree.item(parent_item, text=f"{icon} {name}", tags=(parent_state,))
+
+    def _propagate_colors_to_parents(self, path: str):
+        """
+        Propage les couleurs aux nœuds parents en fonction de l'état de leurs enfants.
+
+        Logique:
+        - Si tous les enfants sont verts → parent vert
+        - Si au moins un enfant est vert ou orange → parent orange
+        - Si tous les enfants sont rouges ou none → parent rouge
+        - Si aucun enfant traduisible → pas de couleur
+        """
+        path_parts = path.split("/")
+
+        # Parcourir tous les niveaux parents (du plus profond vers la racine)
+        for i in range(len(path_parts) - 1, 0, -1):
+            parent_path = "/".join(path_parts[:i])
+            parent_item = self.path_to_tree_item.get(parent_path)
+
+            if not parent_item:
+                continue
+
+            # Calculer l'état agrégé des enfants
+            parent_state = self._calculate_parent_state(parent_path)
+
+            # Si aucun enfant traduisible, ne pas changer la couleur du parent
+            if parent_state == "none":
+                continue
+
+            # Mettre à jour la couleur du parent
+            current_text = self.tree.item(parent_item, "text")
+            # Extraire le nom sans icône éventuelle
+            if current_text.startswith(("📁", "📄", "✅", "🟠", "❌", "⚪")):
+                parts = current_text.split(" ", 1)
+                name = parts[1] if len(parts) > 1 else parts[0]
+            else:
+                name = current_text
+
+            # Garder l'icône de dossier mais changer la couleur
+            icon = "📁"
+            self.tree.item(parent_item, text=f"{icon} {name}", tags=(parent_state,))
+
+    def _calculate_parent_state(self, parent_path: str) -> str:
+        """
+        Calcule l'état d'un parent basé sur l'état de tous ses enfants traduisibles.
+
+        Logique (noir = "none" = neutre):
+        - Toutes noires (none) → parent noir (none)
+        - Toutes vertes OU noires (au moins une verte, pas de rouge) → parent vert
+        - Toutes rouges OU noires (au moins une rouge, pas de verte) → parent rouge
+        - Mélange de rouges ET vertes (avec ou sans noires) → parent orange
+
+        Returns:
+            "green" - Toutes les entrées non-noires sont vertes
+            "orange" - Mélange de rouges et vertes
+            "red" - Toutes les entrées non-noires sont rouges
+            "none" - Toutes les entrées sont noires (ou pas d'enfants traduisibles)
+        """
+        # Récupérer tous les chemins traduisibles
+        all_translatable_paths = self.got_manager.get_all_translatable_paths()
+
+        # Filtrer pour ne garder que les enfants directs et descendants de ce parent
+        children_paths = [
+            p for p in all_translatable_paths
+            if p.startswith(parent_path + "/") or p.startswith(parent_path + "[")
+        ]
+
+        if not children_paths:
+            return "none"
+
+        # Obtenir l'état de chaque enfant
+        states = [self.got_manager.get_validation_state(p) for p in children_paths]
+
+        # Compter les états (noir = "none" est neutre)
+        green_count = states.count("green")
+        orange_count = states.count("orange")  # Orange compte comme à la fois rouge et vert
+        red_count = states.count("red")
+        none_count = states.count("none")
+
+        total = len(states)
+
+        # Logique de décision
+        # 1. Toutes noires → parent noir
+        if none_count == total:
+            return "none"
+
+        # Compter les "vraies" entrées colorées (ignorer les noires)
+        has_green = green_count > 0 or orange_count > 0
+        has_red = red_count > 0 or orange_count > 0
+
+        # 2. Il y a des rouges ET des vertes → parent orange
+        if has_green and has_red:
+            return "orange"
+
+        # 3. Toutes vertes ou noires (au moins une verte) → parent vert
+        if has_green and not has_red:
+            return "green"
+
+        # 4. Toutes rouges ou noires (au moins une rouge) → parent rouge
+        if has_red and not has_green:
+            return "red"
+
+        # Par défaut (ne devrait pas arriver)
+        return "none"
+
+    def _get_context_for_path(self, path: str) -> str:
+        """Récupère le contexte d'un chemin pour l'IA."""
+        parts = path.split("/")
+        return " > ".join(parts)
+
+    def _expand_all(self):
+        """Déplie tous les nœuds de l'arbre."""
+        def expand_recursive(item):
+            self.tree.item(item, open=True)
+            for child in self.tree.get_children(item):
+                expand_recursive(child)
+
+        for item in self.tree.get_children():
+            expand_recursive(item)
+
+    def _collapse_all(self):
+        """Plie tous les nœuds de l'arbre."""
+        def collapse_recursive(item):
+            self.tree.item(item, open=False)
+            for child in self.tree.get_children(item):
+                collapse_recursive(child)
+
+        for item in self.tree.get_children():
+            collapse_recursive(item)
+
+    def save_file(self):
+        """Sauvegarde le fichier .got.json."""
+        if not self.got_manager or not self.current_file_path:
+            messagebox.showwarning("Attention", "Aucun fichier chargé")
+            return
+
+        try:
+            self.got_manager.save_to_file()
+            self._mark_as_saved()
+            self.status_label.config(text=f"✓ Fichier sauvegardé: {Path(self.current_file_path).name}")
+            self.chat_panel.add_message("system", "Fichier sauvegardé")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible de sauvegarder:\n{e}")
+            self.status_label.config(text="❌ Erreur de sauvegarde")
+
+    def _show_about(self):
+        """Affiche la boîte de dialogue À propos."""
+        messagebox.showinfo("À propos",
+            "OllamaTrad v2.0\n\n"
+            "Traduction intelligente de fichiers JSON\n"
+            "avec support multi-langues et IA.\n\n"
+            "Format: .got.json v2.0\n"
+            "© 2025")
+
+    def _update_export_menu(self):
+        """Met à jour le menu Export avec les langues disponibles."""
+        # Vider le menu
+        self.export_menu.delete(0, "end")
+
+        if not self.got_manager:
+            # Aucun fichier chargé
+            self.export_menu.add_command(label="(Aucun fichier chargé)", state="disabled")
+            return
+
+        # Ajouter une entrée pour chaque langue cible
+        for lang in self.got_manager.target_languages:
+            self.export_menu.add_command(
+                label=f"{lang.upper()}",
+                command=lambda l=lang: self._export_with_language(l)
+            )
+
+        # Séparateur
+        self.export_menu.add_separator()
+
+        # Entrée "Autre..."
+        self.export_menu.add_command(
+            label="Autre...",
+            command=lambda: self._export_with_language(None)
+        )
+
+    def _export_with_language(self, language: Optional[str]):
+        """
+        Ouvre le dialogue d'export avec une langue pré-sélectionnée.
+
+        Args:
+            language: Code langue ou None pour "Autre..."
+        """
+        if not self.got_manager or not self.current_file_path:
+            messagebox.showerror("Erreur", "Aucun fichier chargé")
+            return
+
+        # Importer le dialogue d'export
+        from gui.export_dialog import ExportDialog
+
+        # Créer et afficher le dialogue
+        dialog = ExportDialog(
+            parent=self.root,
+            current_file_path=self.current_file_path,
+            target_language=language,
+            available_languages=self.got_manager.target_languages
+        )
+
+        result = dialog.show()
+
+        if result:
+            # Exécuter l'export
+            self._perform_export(
+                output_path=result['output_path'],
+                target_language=result['language'],
+                mode=result['mode']
+            )
+
+    def _perform_export(self, output_path: str, target_language: str, mode: str):
+        """
+        Effectue l'export vers JSON.
+
+        Args:
+            output_path: Chemin du fichier de sortie
+            target_language: Langue cible
+            mode: "standard" ou "validated"
+        """
+        try:
+            # Obtenir les statistiques avant export
+            stats = self.got_manager.get_export_stats(target_language, mode)
+
+            # Confirmation avec statistiques
+            mode_label = "Standard" if mode == "standard" else "Unique Validé"
+            message = (
+                f"Export en mode {mode_label}\n\n"
+                f"Langue: {target_language.upper()}\n"
+                f"Fichier: {Path(output_path).name}\n\n"
+                f"Statistiques:\n"
+                f"  • Total d'entrées: {stats['total_entries']}\n"
+                f"  • Traductions utilisées: {stats['translated_entries']}\n"
+                f"  • Originaux conservés: {stats['original_entries']}\n"
+                f"  • Taux de traduction: {stats['percentage']:.1f}%\n\n"
+                f"Continuer l'export ?"
+            )
+
+            response = messagebox.askyesno("Confirmer l'export", message)
+            if not response:
+                return
+
+            # Effectuer l'export
+            self.status_label.config(text="📤 Export en cours...")
+            self.root.update()
+
+            self.got_manager.export_to_json(output_path, target_language, mode)
+
+            # Succès
+            self.status_label.config(text=f"✓ Export réussi: {Path(output_path).name}")
+
+            messagebox.showinfo(
+                "Export réussi",
+                f"Le fichier a été exporté avec succès !\n\n"
+                f"Fichier: {output_path}\n"
+                f"Langue: {target_language.upper()}\n"
+                f"Mode: {mode_label}\n"
+                f"Entrées traduites: {stats['translated_entries']}/{stats['total_entries']}"
+            )
+
+        except ValueError as e:
+            messagebox.showerror("Erreur", f"Erreur de configuration:\n{str(e)}")
+            self.status_label.config(text="❌ Erreur d'export")
+
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de l'export:\n{str(e)}")
+            self.status_label.config(text="❌ Erreur d'export")
+
+    def _update_character_count(self):
+        """Met à jour l'affichage du compteur de caractères dans la barre de statut."""
+        try:
+            # Obtenir le compteur par provider
+            counts = self.ai_client.get_character_count_by_provider()
+
+            # Gérer DeepL séparément
+            deepl_count = counts.get("deepl", 0)
+            if deepl_count > 0:
+                # Récupérer la limite configurée
+                deepl_config = self.translation_config.get("ai_config", {}).get("deepl", {})
+                limit = deepl_config.get("character_limit", 0)
+
+                if limit > 0:
+                    percentage = (deepl_count / limit) * 100
+                    # Changer la couleur selon le pourcentage
+                    if percentage >= 90:
+                        self.deepl_count_label.config(text=f"DLP: {deepl_count:,} car. ({percentage:.0f}%)", foreground="red")
+                    elif percentage >= 70:
+                        self.deepl_count_label.config(text=f"DLP: {deepl_count:,} car. ({percentage:.0f}%)", foreground="orange")
+                    else:
+                        self.deepl_count_label.config(text=f"DLP: {deepl_count:,} car.", foreground="green")
+                else:
+                    self.deepl_count_label.config(text=f"DLP: {deepl_count:,} car.", foreground="blue")
+            else:
+                self.deepl_count_label.config(text="")
+
+            # Filtrer pour les autres providers payants (sans DeepL)
+            other_paid_providers = ["openai", "mistral", "anthropic"]
+            active_counts = {name: count for name, count in counts.items()
+                           if name in other_paid_providers and count > 0}
+
+            if active_counts:
+                # Formater l'affichage
+                total = sum(active_counts.values())
+                display_text = f"📊 {total:,} car."
+                self.char_count_label.config(text=display_text)
+            else:
+                self.char_count_label.config(text="📊 0 car.")
+
+        except Exception as e:
+            print(f"Erreur mise à jour compteur: {e}")
+
+        # Répéter toutes les 2 secondes
+        self.root.after(2000, self._update_character_count)
+
+    def _show_character_usage_summary(self):
+        """Affiche un résumé de l'utilisation des caractères à la fermeture."""
+        try:
+            counts = self.ai_client.get_character_count_by_provider()
+            paid_providers = ["openai", "mistral", "anthropic", "deepl"]
+            active_counts = {name: count for name, count in counts.items()
+                           if name in paid_providers and count > 0}
+
+            if active_counts:
+                message = "📊 Résumé de l'utilisation durant cette session:\n\n"
+
+                for name, count in sorted(active_counts.items()):
+                    message += f"  • {name.upper()}: {count:,} caractères\n"
+
+                total = sum(active_counts.values())
+                message += f"\n  Total: {total:,} caractères\n"
+
+                # Ajouter des estimations de coût approximatives
+                message += "\n💰 Estimation de coût approximative:\n"
+
+                if "openai" in active_counts:
+                    # GPT-4: ~$0.03 / 1K tokens (~4 chars/token = ~4K chars)
+                    cost = (active_counts["openai"] / 4000) * 0.03
+                    message += f"  • OpenAI: ~${cost:.4f}\n"
+
+                if "anthropic" in active_counts:
+                    # Claude: ~$0.015 / 1K tokens
+                    cost = (active_counts["anthropic"] / 4000) * 0.015
+                    message += f"  • Anthropic: ~${cost:.4f}\n"
+
+                if "mistral" in active_counts:
+                    # Mistral: ~$0.002 / 1K tokens
+                    cost = (active_counts["mistral"] / 4000) * 0.002
+                    message += f"  • Mistral: ~${cost:.4f}\n"
+
+                if "deepl" in active_counts:
+                    # DeepL: récupérer la limite configurée
+                    chars = active_counts["deepl"]
+                    deepl_config = self.translation_config.get("ai_config", {}).get("deepl", {})
+                    limit = deepl_config.get("character_limit", 500000)
+                    is_pro = deepl_config.get("is_pro", False)
+
+                    if limit > 0:
+                        percentage = (chars / limit) * 100
+                        message += f"  • DeepL: {chars:,} / {limit:,} chars ({percentage:.1f}%)\n"
+                        if chars > limit:
+                            message += f"    ⚠️ Limite dépassée!\n"
+                    else:
+                        message += f"  • DeepL: {chars:,} chars (pas de limite configurée)\n"
+
+                    if not is_pro:
+                        message += f"    ℹ️ Compte gratuit: 500,000 chars/mois\n"
+
+                message += "\nℹ️ Ces estimations sont approximatives."
+
+                messagebox.showinfo("Utilisation des APIs", message)
+        except Exception as e:
+            print(f"Erreur affichage résumé: {e}")
 
     def run(self):
-        """Lance l'application"""
+        """Lance l'application."""
+        # Intercepter la fermeture pour afficher le résumé et vérifier les modifications
+        def on_closing():
+            # Vérifier si des modifications non sauvegardées existent
+            if self.has_unsaved_changes and self.got_manager:
+                # Vérifier l'option de sauvegarde automatique
+                auto_save = self.translation_config.get("auto_save_on_exit", False)
+
+                if auto_save:
+                    # Sauvegarde automatique
+                    try:
+                        self.got_manager.save_to_file()
+                        self.chat_panel.add_message("system", "✓ Fichier sauvegardé automatiquement")
+                    except Exception as e:
+                        # En cas d'erreur, demander à l'utilisateur
+                        messagebox.showerror("Erreur de sauvegarde automatique",
+                            f"Impossible de sauvegarder automatiquement:\n{e}\n\nLe fichier n'a pas été sauvegardé.")
+                else:
+                    # Demander confirmation à l'utilisateur
+                    response = messagebox.askyesnocancel(
+                        "Modifications non sauvegardées",
+                        "Le fichier contient des modifications non sauvegardées.\n\n"
+                        "Voulez-vous sauvegarder avant de quitter ?\n\n"
+                        "Oui: Sauvegarder et quitter\n"
+                        "Non: Quitter sans sauvegarder\n"
+                        "Annuler: Revenir à l'application"
+                    )
+
+                    if response is None:  # Annuler
+                        return
+                    elif response:  # Oui - Sauvegarder
+                        try:
+                            self.got_manager.save_to_file()
+                            self.chat_panel.add_message("system", "✓ Fichier sauvegardé")
+                        except Exception as e:
+                            messagebox.showerror("Erreur", f"Impossible de sauvegarder:\n{e}")
+                            return  # Ne pas quitter si la sauvegarde a échoué
+                    # Si Non, continuer sans sauvegarder
+
+            # Afficher le résumé d'utilisation des APIs
+            self._show_character_usage_summary()
+            self.root.destroy()
+
+        self.root.protocol("WM_DELETE_WINDOW", on_closing)
         self.root.mainloop()
 
-def main(file_path: str = None):
-    """Point d'entrée pour l'interface graphique"""
+
+def main(initial_file: Optional[str] = None):
+    """Point d'entrée principal pour l'interface graphique."""
     if not TKINTER_AVAILABLE:
-        print("❌ Erreur: tkinter n'est pas disponible sur ce système.")
-        print("💡 Solutions possibles:")
-        print("   - Sur Ubuntu/Debian: sudo apt-get install python3-tkinter")
-        print("   - Sur Windows: Réinstallez Python avec l'option 'tcl/tk and IDLE'")
-        print("   - Ou utilisez le mode CLI: python ollamaTrad.py")
+        print("❌ tkinter n'est pas disponible sur ce système")
+        print("   Installation requise pour utiliser l'interface graphique")
         return
 
-    app = OllamaTradGUI()
-
-    # Charger le fichier si spécifié
-    if file_path:
-        try:
-            # Utiliser la logique de open_file mais directement
-            app.json_manager = JsonManager(file_path)
-            app.populate_tree()
-            app.file_var.set(f"Fichier: {Path(file_path).name}")
-            app.status_var.set("✅ Fichier chargé avec succès")
-            print(f"✅ Fichier chargé: {file_path}")
-        except Exception as e:
-            print(f"❌ Erreur lors du chargement du fichier: {e}")
-
+    app = OllamaTradGUI(initial_file)
     app.run()
 
+
 if __name__ == "__main__":
-    main()
+    import sys
+    file_to_load = sys.argv[1] if len(sys.argv) > 1 else None
+    main(file_to_load)

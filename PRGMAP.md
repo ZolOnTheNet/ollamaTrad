@@ -1,8 +1,8 @@
-# PRGMAP.md - Architecture du Programme OllamaFic
+# PRGMAP.md - Architecture du Programme OllamaTrad
 
 ## Vue d'ensemble du projet
 
-OllamaFic est une application Python sophistiquée conçue pour le traitement intelligent de fichiers JSON utilisant plusieurs fournisseurs d'IA (Ollama, OpenAI, Mistral, Anthropic). Elle propose des interfaces CLI et GUI avec un système de navigation similaire à un système de fichiers pour les structures JSON.
+OllamaTrad est une application Python sophistiquée conçue pour le traitement intelligent de fichiers JSON utilisant plusieurs fournisseurs d'IA (Ollama, OpenAI, Mistral, Anthropic). Elle propose des interfaces CLI et GUI avec un système de navigation similaire à un système de fichiers pour les structures JSON.
 
 ## Structure des répertoires
 

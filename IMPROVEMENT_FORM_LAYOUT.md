@@ -413,4 +413,4 @@ Le formulaire de traduction est maintenant:
 
 **Auteur**: Claude (Anthropic)
 **Date**: 2025-10-16
-**Version**: OllamaFic v2.0 - Amélioration Layout Formulaire
+**Version**: OllamaTrad v2.0 - Amélioration Layout Formulaire
