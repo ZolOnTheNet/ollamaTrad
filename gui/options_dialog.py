@@ -500,8 +500,21 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
                  width=40).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
 
         ttk.Label(self.ollama_config_frame, text="Modèle:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
-        ttk.Entry(self.ollama_config_frame, textvariable=self.ollama_model_var,
-                 width=40).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+
+        # Frame pour le combobox et le bouton de rafraîchissement
+        model_frame = ttk.Frame(self.ollama_config_frame)
+        model_frame.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+
+        self.ollama_model_combo = ttk.Combobox(model_frame, textvariable=self.ollama_model_var,
+                                               width=30, state="normal")
+        self.ollama_model_combo.pack(side="left", fill="x", expand=True, padx=(0, 5))
+
+        self.refresh_ollama_models_btn = ttk.Button(model_frame, text="🔄 Rafraîchir",
+                                                    command=self._refresh_ollama_models, width=12)
+        self.refresh_ollama_models_btn.pack(side="left")
+
+        ttk.Label(self.ollama_config_frame, text="(Liste des modèles installés sur le serveur Ollama)",
+                 font=("Arial", 8), foreground="gray").grid(row=2, column=1, sticky="w", padx=5)
 
         self.ollama_config_frame.columnconfigure(1, weight=1)
 
@@ -678,6 +691,115 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
                     child.config(state="disabled")
                 except:
                     pass
+
+    def _refresh_ollama_models_silent(self):
+        """Récupère silencieusement la liste des modèles Ollama (sans messagebox)"""
+        import requests
+
+        try:
+            # Récupérer l'hôte Ollama
+            host = self.ollama_host_var.get().strip() or "http://localhost:11434"
+
+            # Appeler l'API Ollama pour récupérer les modèles
+            response = requests.get(f"{host}/api/tags", timeout=3)
+
+            if response.status_code == 200:
+                data = response.json()
+                models = data.get('models', [])
+
+                if models:
+                    # Extraire les noms des modèles
+                    model_names = [model['name'] for model in models]
+
+                    # Mettre à jour le combobox
+                    self.ollama_model_combo['values'] = model_names
+
+                    # Si le modèle actuel n'est pas dans la liste, le sélectionner quand même
+                    current_model = self.ollama_model_var.get()
+                    if current_model and current_model not in model_names:
+                        model_names.insert(0, current_model)
+                        self.ollama_model_combo['values'] = model_names
+                else:
+                    self.ollama_model_combo['values'] = []
+            else:
+                self.ollama_model_combo['values'] = []
+
+        except:
+            # En mode silencieux, on ignore les erreurs
+            self.ollama_model_combo['values'] = []
+
+    def _refresh_ollama_models(self):
+        """Récupère et affiche la liste des modèles Ollama disponibles"""
+        import requests
+
+        try:
+            # Récupérer l'hôte Ollama
+            host = self.ollama_host_var.get().strip() or "http://localhost:11434"
+
+            # Désactiver le bouton pendant le chargement
+            self.refresh_ollama_models_btn.config(state="disabled", text="⏳ Chargement...")
+            self.update()
+
+            # Appeler l'API Ollama pour récupérer les modèles
+            response = requests.get(f"{host}/api/tags", timeout=5)
+
+            if response.status_code == 200:
+                data = response.json()
+                models = data.get('models', [])
+
+                if models:
+                    # Extraire les noms des modèles
+                    model_names = [model['name'] for model in models]
+
+                    # Mettre à jour le combobox
+                    self.ollama_model_combo['values'] = model_names
+
+                    # Si le modèle actuel n'est pas dans la liste, le sélectionner quand même
+                    current_model = self.ollama_model_var.get()
+                    if current_model and current_model not in model_names:
+                        model_names.insert(0, current_model)
+                        self.ollama_model_combo['values'] = model_names
+
+                    messagebox.showinfo("Succès",
+                                      f"{len(model_names)} modèle(s) Ollama trouvé(s):\n" +
+                                      "\n".join(f"  • {name}" for name in model_names[:10]) +
+                                      (f"\n  ... et {len(model_names) - 10} autres" if len(model_names) > 10 else ""))
+                else:
+                    messagebox.showwarning("Attention",
+                                         "Aucun modèle Ollama trouvé sur le serveur.\n" +
+                                         "Installez des modèles avec: ollama pull <nom_modele>")
+                    self.ollama_model_combo['values'] = []
+            else:
+                messagebox.showerror("Erreur",
+                                   f"Impossible de se connecter à Ollama.\n" +
+                                   f"Code HTTP: {response.status_code}\n\n" +
+                                   f"Vérifiez que le serveur Ollama est démarré sur {host}")
+                self.ollama_model_combo['values'] = []
+
+        except requests.exceptions.ConnectionError:
+            messagebox.showerror("Erreur de connexion",
+                               f"Impossible de se connecter au serveur Ollama sur {host}.\n\n" +
+                               "Vérifiez que:\n" +
+                               "  • Le serveur Ollama est démarré\n" +
+                               "  • L'adresse de l'hôte est correcte\n" +
+                               "  • Aucun pare-feu ne bloque la connexion")
+            self.ollama_model_combo['values'] = []
+
+        except requests.exceptions.Timeout:
+            messagebox.showerror("Timeout",
+                               f"Le serveur Ollama ne répond pas (timeout).\n\n" +
+                               "Le serveur est peut-être occupé ou hors ligne.")
+            self.ollama_model_combo['values'] = []
+
+        except Exception as e:
+            messagebox.showerror("Erreur",
+                               f"Erreur inattendue lors de la récupération des modèles:\n{e}")
+            self.ollama_model_combo['values'] = []
+
+        finally:
+            # Réactiver le bouton
+            self.refresh_ollama_models_btn.config(state="normal", text="🔄 Rafraîchir")
+            self.update()
 
     def _reset_deepl_counter(self):
         """Réinitialise le compteur de caractères DeepL"""
@@ -950,6 +1072,11 @@ Fichier de configuration: translation_config.json
         self._on_provider_changed()  # Afficher le bon panneau
         self._on_deepl_enabled_changed()  # Activer/désactiver le frame DeepL
         self._update_deepl_counter_display()  # Mettre à jour l'affichage du compteur
+
+        # Charger automatiquement les modèles Ollama si c'est le provider actif
+        if self.ai_provider_var.get() == "ollama":
+            # Utiliser after() pour charger les modèles après l'affichage de la fenêtre
+            self.after(100, self._refresh_ollama_models_silent)
 
         # Prompts
         prompts = self.config.get("prompts", {})

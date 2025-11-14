@@ -539,12 +539,66 @@ class CLIInterface:
             print(f"❌ Erreur: {e}")
 
     def cmd_models(self) -> None:
-        """Liste les modèles Ollama disponibles"""
+        """Liste les modèles Ollama disponibles avec détails"""
         try:
-            models = self.ollama_client.get_available_models()
-            print("🤖 Modèles disponibles:")
-            for model in models:
-                print(f"  - {model}")
+            import requests
+
+            # Utiliser la configuration Ollama depuis ai_client
+            if "ollama" in self.ai_client.providers:
+                ollama_provider = self.ai_client.providers["ollama"]
+                host = ollama_provider.host
+            else:
+                host = "http://localhost:11434"
+
+            # Récupérer la liste des modèles via l'API Ollama
+            response = requests.get(f"{host}/api/tags", timeout=5)
+
+            if response.status_code == 200:
+                data = response.json()
+                models = data.get('models', [])
+
+                if models:
+                    print(f"🤖 Modèles Ollama disponibles sur {host}:")
+                    print("─" * 80)
+
+                    for model in models:
+                        name = model.get('name', 'N/A')
+                        size_bytes = model.get('size', 0)
+
+                        # Convertir la taille en format lisible
+                        if size_bytes > 0:
+                            if size_bytes >= 1024**3:  # GB
+                                size_str = f"{size_bytes / (1024**3):.2f} GB"
+                            elif size_bytes >= 1024**2:  # MB
+                                size_str = f"{size_bytes / (1024**2):.2f} MB"
+                            else:
+                                size_str = f"{size_bytes / 1024:.2f} KB"
+                        else:
+                            size_str = "Taille inconnue"
+
+                        modified = model.get('modified_at', 'N/A')
+                        if modified != 'N/A' and 'T' in modified:
+                            # Formater la date (ISO 8601 -> plus lisible)
+                            modified = modified.split('T')[0]  # Garder seulement la date
+
+                        print(f"  📦 {name}")
+                        print(f"     Taille: {size_str}")
+                        print(f"     Modifié: {modified}")
+                        print()
+
+                    print(f"Total: {len(models)} modèle(s)")
+                else:
+                    print("⚠️ Aucun modèle Ollama trouvé.")
+                    print("💡 Installez un modèle avec: ollama pull <nom_modele>")
+            else:
+                print(f"❌ Erreur HTTP {response.status_code} lors de la connexion à Ollama")
+                print(f"   Vérifiez que le serveur est démarré sur {host}")
+
+        except requests.exceptions.ConnectionError:
+            print(f"❌ Impossible de se connecter au serveur Ollama")
+            print(f"   Vérifiez que le serveur est démarré et accessible")
+        except requests.exceptions.Timeout:
+            print(f"❌ Timeout lors de la connexion au serveur Ollama")
         except Exception as e:
             print(f"❌ Erreur: {e}")
 

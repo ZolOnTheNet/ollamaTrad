@@ -7,19 +7,23 @@ Ce script sert de point d'entrée principal pour l'application OllamaTrad.
 Il permet de lancer soit l'interface en ligne de commande, soit l'interface graphique.
 
 Usage:
-    python ollamaTrad.py [--gui] [--file <fichier>] [--command <commande>]
+    python ollamaTrad.py [--gui | --cli] [--file <fichier>] [--command <commande>]
 
 Options:
-    --gui           Lance l'interface graphique v2.0 (par défaut: CLI)
+    --gui           Lance l'interface graphique v2.0
+    --cli           Force le mode CLI (priorité sur --gui)
     --file FILE     Fichier JSON à charger au démarrage
     --command CMD   Commande à exécuter directement (CLI seulement)
     --help          Affiche cette aide
 
+Par défaut (sans --gui ni --cli): Lance le CLI
+
 Exemples:
     python ollamaTrad.py                        # Lance le CLI interactif
     python ollamaTrad.py --gui                  # Lance l'interface graphique v2.0
-    python ollamaTrad.py --file data.json       # Lance le CLI avec un fichier
+    python ollamaTrad.py --cli --file data.json # Force le CLI avec un fichier
     python ollamaTrad.py --command "ls /"       # Exécute une commande directement
+    python ollamaTrad.py --gui --cli            # Force le CLI (--cli prioritaire)
 """
 
 import argparse
@@ -44,9 +48,11 @@ def main():
         description="OllamaTrad - Traitement intelligent de fichiers JSON avec IA",
         epilog="""
 Exemples d'utilisation:
-  python ollamaTrad.py                     # Lance le CLI interactif
+  python ollamaTrad.py                     # Lance le CLI interactif (par défaut)
   python ollamaTrad.py --gui               # Lance l'interface graphique
-  python ollamaTrad.py -f data.json        # Charge un fichier au démarrage
+  python ollamaTrad.py --cli               # Force le mode CLI
+  python ollamaTrad.py --gui --cli         # Force le CLI (--cli prioritaire)
+  python ollamaTrad.py -f data.json        # Charge un fichier au démarrage (CLI)
   python ollamaTrad.py -c "translate /title fr"  # Exécute une commande directement
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
@@ -56,6 +62,12 @@ Exemples d'utilisation:
         "--gui",
         action="store_true",
         help="Lance l'interface graphique avec formulaire de traduction"
+    )
+
+    parser.add_argument(
+        "--cli",
+        action="store_true",
+        help="Force le mode CLI (priorité sur --gui si les deux sont présents)"
     )
 
     parser.add_argument(
@@ -83,13 +95,22 @@ Exemples d'utilisation:
         print(f"❌ Erreur: Le fichier '{args.file}' n'existe pas.")
         sys.exit(1)
 
+    # Déterminer le mode de lancement
+    # --cli a priorité sur --gui
+    force_cli = args.cli
+    launch_gui = args.gui and not force_cli
+
     # Vérifier que --command n'est pas utilisé avec --gui
-    if args.gui and args.command:
+    if launch_gui and args.command:
         print("❌ Erreur: --command ne peut pas être utilisé avec --gui")
         sys.exit(1)
 
+    # Avertir si --cli et --gui sont tous les deux présents
+    if args.gui and args.cli:
+        print("⚠️  Note: --cli et --gui sont tous les deux présents. --cli a priorité, lancement en mode CLI.")
+
     try:
-        if args.gui:
+        if launch_gui:
             # Lancer l'interface graphique
             print(">> Lancement de l'interface graphique OllamaTrad...")
 
