@@ -27,10 +27,24 @@ class CLIInterface:
         self.current_path: str = ""  # Chemin courant dans le JSON
 
     def get_preferred_model(self) -> str:
-        """Retourne le modèle préféré avec aya en priorité"""
+        """Retourne le modèle configuré pour le provider actuel"""
         try:
-            return self.ollama_client.get_preferred_default_model()
-        except:
+            # Récupérer le modèle configuré depuis ai_client
+            provider_name = self.ai_client.get_current_provider_name()
+
+            if provider_name == "ollama" and "ollama" in self.ai_client.providers:
+                ollama_provider = self.ai_client.providers["ollama"]
+                return ollama_provider.default_model
+
+            # Fallback vers la configuration générale
+            if hasattr(self.ai_client, 'config') and 'ai_providers' in self.ai_client.config:
+                providers_config = self.ai_client.config['ai_providers']
+                if provider_name in providers_config:
+                    return providers_config[provider_name].get('default_model', 'aya')
+
+            return "aya"
+        except Exception as e:
+            print(f"⚠️ Avertissement: Impossible de récupérer le modèle configuré ({e}), utilisation de 'aya' par défaut")
             return "aya"
 
     def _sync_current_path(self) -> None:

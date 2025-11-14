@@ -794,7 +794,7 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
 
         finally:
             # Réactiver le bouton
-            self.refresh_ollama_models_btn.config(state="normal", text="🔄 Rafraîchir")
+            self.refresh_ollama_models_btn.config(state="normal", text="🔄 Liste")
             self.update()
 
     def _reset_deepl_counter(self):
@@ -1045,19 +1045,20 @@ Fichier de configuration: translation_config.json
 
         ollama_config = ai_config.get("ollama", {})
         self.ollama_host_var.set(ollama_config.get("host", "http://localhost:11434"))
-        self.ollama_model_var.set(ollama_config.get("model", "aya"))
+        # Charger depuis "model" ou "default_model" (compatibilité avec settings.json)
+        self.ollama_model_var.set(ollama_config.get("model", ollama_config.get("default_model", "aya")))
 
         openai_config = ai_config.get("openai", {})
         self.openai_api_key_var.set(openai_config.get("api_key", ""))
-        self.openai_model_var.set(openai_config.get("model", "gpt-4"))
+        self.openai_model_var.set(openai_config.get("model", openai_config.get("default_model", "gpt-4")))
 
         mistral_config = ai_config.get("mistral", {})
         self.mistral_api_key_var.set(mistral_config.get("api_key", ""))
-        self.mistral_model_var.set(mistral_config.get("model", "mistral-large-latest"))
+        self.mistral_model_var.set(mistral_config.get("model", mistral_config.get("default_model", "mistral-large-latest")))
 
         anthropic_config = ai_config.get("anthropic", {})
         self.anthropic_api_key_var.set(anthropic_config.get("api_key", ""))
-        self.anthropic_model_var.set(anthropic_config.get("model", "claude-3-sonnet-20240229"))
+        self.anthropic_model_var.set(anthropic_config.get("model", anthropic_config.get("default_model", "claude-3-sonnet-20240229")))
 
         deepl_config = ai_config.get("deepl", {})
         self.deepl_enabled_var.set(deepl_config.get("enabled", False))
@@ -1200,13 +1201,19 @@ Fichier de configuration: translation_config.json
             if "ai_providers" not in settings:
                 settings["ai_providers"] = {}
 
-            # Copier les configurations
+            # Copier les configurations avec mapping des clés
             for provider in ["ollama", "openai", "mistral", "anthropic", "deepl"]:
                 if provider in ai_config:
                     if provider not in settings["ai_providers"]:
                         settings["ai_providers"][provider] = {}
 
-                    settings["ai_providers"][provider].update(ai_config[provider])
+                    # Mapper les clés correctement
+                    provider_config = ai_config[provider].copy()
+                    if "model" in provider_config:
+                        # Convertir "model" en "default_model" pour settings.json
+                        provider_config["default_model"] = provider_config.pop("model")
+
+                    settings["ai_providers"][provider].update(provider_config)
 
             # Mettre à jour le provider par défaut
             settings["ai_providers"]["default_provider"] = ai_config["provider"]
