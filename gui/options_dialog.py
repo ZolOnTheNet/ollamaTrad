@@ -125,7 +125,7 @@ class OptionsDialog(tk.Toplevel):
                 "provider": "ollama",
                 "ollama": {
                     "host": "http://localhost:11434",
-                    "model": "aya"
+                    "model": "aya:8b"
                 },
                 "openai": {
                     "api_key": "",
@@ -927,7 +927,7 @@ Fichier de configuration: translation_config.json
 
         ollama_config = ai_config.get("ollama", {})
         self.ollama_host_var.set(ollama_config.get("host", "http://localhost:11434"))
-        self.ollama_model_var.set(ollama_config.get("model", "aya"))
+        self.ollama_model_var.set(ollama_config.get("model", "aya:8b"))
 
         openai_config = ai_config.get("openai", {})
         self.openai_api_key_var.set(openai_config.get("api_key", ""))

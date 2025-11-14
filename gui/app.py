@@ -337,6 +337,20 @@ class OllamaTradGUI:
         """Ouvre la fenêtre d'options"""
         def on_save(config):
             self.translation_config = config
+
+            # Recharger le AI client avec la nouvelle configuration
+            if "ai_config" in config:
+                ai_config = config["ai_config"]
+
+                # Mettre à jour chaque provider configuré
+                for provider_name in ["ollama", "openai", "mistral", "anthropic", "deepl"]:
+                    if provider_name in ai_config:
+                        self.ai_client.update_provider_config(provider_name, ai_config[provider_name])
+
+                # Changer le provider actif si nécessaire
+                if "provider" in ai_config:
+                    self.ai_client.set_provider(ai_config["provider"])
+
             # Recharger l'affichage si un fichier est ouvert
             if self.got_manager:
                 self._refresh_after_config_change()
