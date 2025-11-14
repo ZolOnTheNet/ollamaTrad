@@ -45,7 +45,7 @@ def main():
         epilog="""
 Exemples d'utilisation:
   python ollamaTrad.py                     # Lance le CLI interactif
-  python ollamaTrad.py --gui               # Lance l'interface graphique v2.0
+  python ollamaTrad.py --gui               # Lance l'interface graphique
   python ollamaTrad.py -f data.json        # Charge un fichier au démarrage
   python ollamaTrad.py -c "translate /title fr"  # Exécute une commande directement
         """,
@@ -55,7 +55,7 @@ Exemples d'utilisation:
     parser.add_argument(
         "--gui",
         action="store_true",
-        help="Lance l'interface graphique v2.0 avec formulaire de traduction"
+        help="Lance l'interface graphique avec formulaire de traduction"
     )
 
     parser.add_argument(
@@ -90,13 +90,13 @@ Exemples d'utilisation:
 
     try:
         if args.gui:
-            # Lancer l'interface graphique v2.0
-            print(">> Lancement de l'interface graphique OllamaTrad v2.0...")
+            # Lancer l'interface graphique
+            print(">> Lancement de l'interface graphique OllamaTrad...")
 
             # Import dynamique pour éviter les erreurs si tkinter n'est pas disponible
             try:
-                from gui.app_v2 import main as gui_v2_main
-                gui_v2_main(args.file)
+                from gui.app import main as gui_main
+                gui_main(args.file)
             except ImportError as e:
                 if "tkinter" in str(e):
                     print("!! Erreur: tkinter n'est pas disponible sur ce système.")
