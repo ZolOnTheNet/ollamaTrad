@@ -19,6 +19,7 @@ class AIProvider(ABC):
         self.conversation_history: List[Dict[str, str]] = []
         self.session_variables: Dict[str, Any] = {}  # Variables de session (/set)
         self.current_model = config.get("default_model", "")
+        self.character_count = 0  # Compteur de caractères pour APIs payantes
 
     @abstractmethod
     async def chat(self, message: str, system_prompt: Optional[str] = None, timeout: Optional[int] = None) -> str:
@@ -200,6 +201,20 @@ class AIProvider(ABC):
             "session_variables": dict(self.session_variables),
             "connected": self.check_connection()
         }
+
+    def get_character_count(self) -> int:
+        """Retourne le nombre de caractères envoyés durant la session"""
+        return self.character_count
+
+    def reset_character_count(self):
+        """Remet à zéro le compteur de caractères"""
+        self.character_count = 0
+
+    def _count_characters(self, text: str) -> int:
+        """Compte les caractères dans un texte et l'ajoute au compteur"""
+        char_count = len(text)
+        self.character_count += char_count
+        return char_count
 
 
 class OllamaProvider(AIProvider):
@@ -424,6 +439,11 @@ class OpenAIProvider(AIProvider):
             raise Exception("Clé API OpenAI non configurée")
 
         try:
+            # Compter les caractères envoyés
+            self._count_characters(message)
+            if system_prompt:
+                self._count_characters(system_prompt)
+
             # Préparer les messages
             messages = []
 
@@ -543,6 +563,11 @@ class MistralProvider(AIProvider):
             raise Exception("Clé API Mistral non configurée")
 
         try:
+            # Compter les caractères envoyés
+            self._count_characters(message)
+            if system_prompt:
+                self._count_characters(system_prompt)
+
             # Préparer les messages
             messages = []
 
@@ -627,6 +652,11 @@ class AnthropicProvider(AIProvider):
             raise Exception("Clé API Anthropic non configurée")
 
         try:
+            # Compter les caractères envoyés
+            self._count_characters(message)
+            if system_prompt:
+                self._count_characters(system_prompt)
+
             # Préparer les messages (Anthropic a un format différent)
             messages = []
 
@@ -671,6 +701,161 @@ class AnthropicProvider(AIProvider):
 
         except Exception as e:
             raise Exception(f"Erreur lors du chat Anthropic: {e}")
+
+
+class DeepLProvider(AIProvider):
+    """Provider pour DeepL (traduction uniquement)"""
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.api_url = config.get("api_url", "https://api-free.deepl.com/v2/translate")
+        self.api_key = config.get("api_key", "")
+        self.timeout = config.get("timeout", 30)
+        self.is_pro = config.get("is_pro", False)  # Free ou Pro account
+
+        # DeepL n'utilise pas de modèle
+        self.current_model = "DeepL API"
+
+        # Si compte Pro, utiliser l'URL Pro
+        if self.is_pro:
+            self.api_url = config.get("api_url", "https://api.deepl.com/v2/translate")
+
+    def check_connection(self) -> bool:
+        """Vérifie la connexion à DeepL"""
+        if not self.api_key:
+            return False
+
+        try:
+            # Test avec l'endpoint usage pour vérifier l'API key
+            usage_url = self.api_url.replace("/translate", "/usage")
+            headers = {"Authorization": f"DeepL-Auth-Key {self.api_key}"}
+            response = requests.get(usage_url, headers=headers, timeout=5)
+            return response.status_code == 200
+        except:
+            return False
+
+    async def chat(self, message: str, system_prompt: Optional[str] = None, timeout: Optional[int] = None) -> str:
+        """
+        DeepL n'est pas un chatbot, mais on peut l'utiliser pour traduire.
+        Cette méthode est disponible pour compatibilité mais n'est pas recommandée.
+        Utilisez translate() à la place.
+        """
+        raise NotImplementedError("DeepL est un service de traduction, pas un chatbot. Utilisez translate() à la place.")
+
+    async def translate(self, text: str, target_lang: str, source_lang: str = "auto", timeout: Optional[int] = None) -> str:
+        """
+        Traduit un texte avec DeepL.
+
+        Args:
+            text: Texte à traduire
+            target_lang: Langue cible (ex: "FR", "EN", "ES")
+            source_lang: Langue source (ex: "EN", "FR" ou "auto" pour détection automatique)
+            timeout: Timeout en secondes (si None, utilise self.timeout)
+
+        Returns:
+            Texte traduit
+        """
+        if not self.api_key:
+            raise Exception("Clé API DeepL non configurée")
+
+        if not text or not text.strip():
+            return ""
+
+        try:
+            # Compter les caractères envoyés
+            self._count_characters(text)
+
+            # Convertir les codes langue en format DeepL (majuscules)
+            # DeepL utilise des codes spéciaux pour certaines langues
+            target_lang_upper = target_lang.upper()
+
+            # Mapping des codes langue spéciaux DeepL
+            lang_mapping = {
+                "EN": "EN-US",  # Anglais américain par défaut
+                "PT": "PT-BR"   # Portugais brésilien par défaut
+            }
+
+            # Appliquer le mapping si nécessaire (sauf si déjà spécifié)
+            if target_lang_upper in lang_mapping and "-" not in target_lang_upper:
+                target_lang_upper = lang_mapping[target_lang_upper]
+
+            # Préparer les paramètres
+            params = {
+                "text": text,
+                "target_lang": target_lang_upper,
+                "preserve_formatting": "1",  # Préserver le formatage (dont HTML)
+                "tag_handling": "html"  # Gérer les balises HTML
+            }
+
+            # Ajouter la langue source si spécifiée (pas pour auto)
+            if source_lang and source_lang.lower() != "auto":
+                params["source_lang"] = source_lang.upper()
+
+            headers = {
+                "Authorization": f"DeepL-Auth-Key {self.api_key}",
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.api_url,
+                    data=params,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=timeout or self.timeout)
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        translated_text = result["translations"][0]["text"]
+                        return translated_text
+                    else:
+                        error_text = await response.text()
+                        raise Exception(f"Erreur DeepL: {response.status} - {error_text}")
+
+        except Exception as e:
+            raise Exception(f"Erreur lors de la traduction DeepL: {e}")
+
+    async def cmd_show(self, args: List[str]) -> str:
+        """Version DeepL de /show avec informations spécifiques"""
+        base_info = f"🤖 Provider: DeepL\n"
+        base_info += f"📋 Service: Traduction professionnelle\n"
+        base_info += f"🔗 Statut: {'✅ Connecté' if self.check_connection() else '❌ Déconnecté'}\n"
+        base_info += f"💳 Type de compte: {'Pro' if self.is_pro else 'Free'}\n"
+        base_info += f"📊 Caractères envoyés: {self.character_count:,}\n"
+
+        # Ajouter des informations spécifiques DeepL
+        if self.api_key:
+            base_info += f"🔑 API Key: {'*' * 10 + self.api_key[-4:]}\n"
+        else:
+            base_info += f"🔑 API Key: ❌ Non configurée\n"
+
+        base_info += f"🌐 URL API: {self.api_url}\n"
+
+        # Ajouter les limites selon le type de compte
+        if self.is_pro:
+            base_info += f"💰 Coût: Selon volume (facturé)\n"
+        else:
+            base_info += f"💰 Limite gratuite: 500,000 caractères/mois\n"
+
+        # Essayer d'obtenir l'utilisation actuelle
+        try:
+            usage_url = self.api_url.replace("/translate", "/usage")
+            headers = {"Authorization": f"DeepL-Auth-Key {self.api_key}"}
+            response = requests.get(usage_url, headers=headers, timeout=5)
+            if response.status_code == 200:
+                usage_data = response.json()
+                char_count = usage_data.get("character_count", 0)
+                char_limit = usage_data.get("character_limit", 0)
+                if char_limit > 0:
+                    percentage = (char_count / char_limit) * 100
+                    base_info += f"📈 Utilisation API: {char_count:,} / {char_limit:,} ({percentage:.1f}%)\n"
+        except:
+            pass
+
+        return base_info
+
+    async def cmd_load(self, args: List[str]) -> str:
+        """DeepL n'a pas de modèles à charger"""
+        return "ℹ️ DeepL n'utilise pas de modèles. C'est un service de traduction unique."
 
 
 class AIClient:
@@ -722,6 +907,10 @@ class AIClient:
         # Initialiser Anthropic
         if "anthropic" in ai_config:
             self.providers["anthropic"] = AnthropicProvider(ai_config["anthropic"])
+
+        # Initialiser DeepL
+        if "deepl" in ai_config:
+            self.providers["deepl"] = DeepLProvider(ai_config["deepl"])
 
         # Définir le provider par défaut
         default_provider = ai_config.get("default_provider", "ollama")
@@ -798,7 +987,23 @@ class AIClient:
                 self.providers[provider_name] = MistralProvider(self.config["ai_providers"][provider_name])
             elif provider_name == "anthropic":
                 self.providers[provider_name] = AnthropicProvider(self.config["ai_providers"][provider_name])
+            elif provider_name == "deepl":
+                self.providers[provider_name] = DeepLProvider(self.config["ai_providers"][provider_name])
 
             # Si c'est le provider actuel, le recharger
             if self.get_current_provider_name() == provider_name:
                 self.current_provider = self.providers[provider_name]
+
+    def get_total_character_count(self) -> int:
+        """Retourne le total de caractères envoyés tous providers confondus"""
+        total = 0
+        for provider in self.providers.values():
+            total += provider.get_character_count()
+        return total
+
+    def get_character_count_by_provider(self) -> Dict[str, int]:
+        """Retourne le compteur de caractères pour chaque provider"""
+        return {
+            name: provider.get_character_count()
+            for name, provider in self.providers.items()
+        }

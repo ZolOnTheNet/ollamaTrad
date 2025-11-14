@@ -28,6 +28,7 @@ class TranslationFormV2(ttk.Frame):
 
     def __init__(self, parent, got_manager: Optional[GotJsonManager] = None,
                  on_magic_click: Optional[Callable] = None,
+                 on_deepl_click: Optional[Callable] = None,
                  on_validate: Optional[Callable] = None,
                  on_rollback: Optional[Callable] = None,
                  on_manual_edit: Optional[Callable] = None):
@@ -36,6 +37,7 @@ class TranslationFormV2(ttk.Frame):
             parent: Widget parent
             got_manager: Instance de GotJsonManager
             on_magic_click: Callback(lang, action, selection_data, source_lang) pour la baguette magique
+            on_deepl_click: Callback(lang, action, selection_data, source_lang) pour le bouton DeepL
             on_validate: Callback(lang, valid) pour la validation
             on_rollback: Callback(lang) pour le retour arrière
             on_manual_edit: Callback(lang, new_text) pour édition manuelle
@@ -45,6 +47,7 @@ class TranslationFormV2(ttk.Frame):
         self.got_manager = got_manager
         self.visible_languages = []  # Liste des langues à afficher (filtre)
         self.on_magic_click = on_magic_click or (lambda lang, action, sel, src: None)
+        self.on_deepl_click = on_deepl_click or (lambda lang, action, sel, src: None)
         self.on_validate = on_validate or (lambda lang, valid: None)
         self.on_rollback = on_rollback or (lambda lang: None)
         self.on_manual_edit = on_manual_edit or (lambda lang, text: None)
@@ -278,8 +281,16 @@ class TranslationFormV2(ttk.Frame):
                              width=2, relief="raised", cursor="hand2",
                              bg="#FFE4B5", activebackground="#FFD700",
                              command=lambda: self._on_magic_clicked(lang))
-        magic_btn.pack(side="left", padx=(0, 5))
+        magic_btn.pack(side="left", padx=(0, 2))
         self._create_tooltip(magic_btn, "Cliquer pour traduire ou améliorer")
+
+        # Bouton DeepL
+        deepl_btn = tk.Button(header_frame, text="Dpl", font=("Arial", 9, "bold"),
+                             width=3, relief="raised", cursor="hand2",
+                             bg="#0F2B46", fg="white", activebackground="#1A4D7F",
+                             command=lambda: self._on_deepl_clicked(lang))
+        deepl_btn.pack(side="left", padx=(0, 5))
+        self._create_tooltip(deepl_btn, "Traduire ou améliorer avec DeepL")
 
         # Label langue
         lang_label = ttk.Label(header_frame, text=f"{lang.upper()}:",
@@ -421,6 +432,47 @@ class TranslationFormV2(ttk.Frame):
 
         # Appeler le callback parent avec les données de sélection et la langue d'origine
         self.on_magic_click(lang, action, selection_data, source_lang)
+
+    def _on_deepl_clicked(self, lang: str):
+        """Gère le clic sur le bouton DeepL."""
+        if not self.current_entry or lang not in self.text_widgets:
+            return
+
+        text_widget = self.text_widgets[lang]
+
+        # Vérifier s'il y a une sélection
+        selection_data = None
+        try:
+            selection_start = text_widget.index("sel.first")
+            selection_end = text_widget.index("sel.last")
+            selected_text = text_widget.get(selection_start, selection_end)
+
+            if selected_text:
+                # Il y a une sélection
+                selection_data = {
+                    "start": selection_start,
+                    "end": selection_end,
+                    "text": selected_text
+                }
+        except tk.TclError:
+            # Pas de sélection
+            pass
+
+        # Déterminer l'action
+        if selection_data:
+            # Si une sélection existe, toujours traduire/améliorer la sélection
+            full_text = text_widget.get("1.0", "end-1c").strip()
+            action = "translate_selection" if full_text == "" or selection_data["text"] == full_text else "improve_selection"
+        else:
+            # Comportement normal
+            text = text_widget.get("1.0", "end-1c").strip()
+            action = "translate" if text == "" else "improve"
+
+        # Récupérer la langue d'origine sélectionnée
+        source_lang = self.source_lang_var.get() if self.source_lang_var else "auto"
+
+        # Appeler le callback parent avec les données de sélection et la langue d'origine
+        self.on_deepl_click(lang, action, selection_data, source_lang)
 
     def _on_validate_toggled(self, lang: str, valid: bool):
         """Gère le changement d'état de validation."""

@@ -36,6 +36,20 @@
     "openai": {
       "api_key": "",
       "model": "gpt-4"
+    },
+    "mistral": {
+      "api_key": "",
+      "model": "mistral-large-latest"
+    },
+    "anthropic": {
+      "api_key": "",
+      "model": "claude-3-sonnet-20240229"
+    },
+    "deepl": {
+      "enabled": true,
+      "api_key": "673120c9-49e3-4204-b393-7ebfdc64d3b1:fx",
+      "is_pro": false,
+      "character_limit": 500000
     }
   }
 }

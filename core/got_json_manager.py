@@ -401,6 +401,56 @@ class GotJsonManager:
 
         return paths
 
+    def get_translatable_leaves_in_subtree(self, path: str) -> List[str]:
+        """
+        Liste tous les chemins traduisibles dans un sous-arbre.
+
+        Args:
+            path: Chemin du sous-arbre (ex: "app/settings")
+
+        Returns:
+            Liste des chemins relatifs des feuilles (ex: ["app/settings/theme", "app/settings/lang"])
+        """
+        try:
+            subtree = self._get_entry_by_path(path)
+        except (KeyError, ValueError):
+            return []
+
+        leaves = []
+
+        def traverse(obj, current_path=""):
+            if isinstance(obj, dict):
+                # Vérifier si c'est une entrée traduisible
+                if "ori" in obj and isinstance(obj.get("ori"), str):
+                    leaves.append(current_path.strip("/"))
+                else:
+                    for key, value in obj.items():
+                        if key != "__ollamafic__":
+                            new_path = f"{current_path}/{key}"
+                            traverse(value, new_path)
+            elif isinstance(obj, list):
+                for i, item in enumerate(obj):
+                    traverse(item, f"{current_path}[{i}]")
+
+        traverse(subtree, path)
+        return leaves
+
+    def is_translatable_leaf(self, path: str) -> bool:
+        """
+        Vérifie si un chemin pointe vers une feuille traduisible.
+
+        Args:
+            path: Chemin à vérifier
+
+        Returns:
+            True si c'est une feuille traduisible (a un champ "ori")
+        """
+        try:
+            entry = self._get_entry_by_path(path)
+            return isinstance(entry, dict) and "ori" in entry and isinstance(entry.get("ori"), str)
+        except (KeyError, ValueError):
+            return False
+
     # === HELPERS ===
 
     def _get_entry_by_path(self, path: str) -> Dict:
@@ -478,6 +528,191 @@ class GotJsonManager:
             json.dump(self.data, f, indent=2, ensure_ascii=False)
 
         self.filepath = filepath
+
+    # === EXPORT ===
+
+    def export_to_json(self, output_path: str, target_language: str, mode: str = "standard") -> bool:
+        """
+        Exporte le .got.json vers un fichier JSON standard.
+
+        Args:
+            output_path: Chemin du fichier de sortie
+            target_language: Code langue à exporter (ex: "fr", "en")
+            mode: Mode d'export
+                - "standard": Utilise la traduction si définie, sinon l'original
+                - "validated": Utilise uniquement les traductions validées, sinon l'original
+
+        Returns:
+            True si l'export a réussi
+
+        Raises:
+            ValueError: Si la langue n'est pas dans les langues cibles
+        """
+        if target_language not in self.target_languages:
+            raise ValueError(f"Langue '{target_language}' non disponible. Langues: {self.target_languages}")
+
+        if not self.data:
+            raise ValueError("Aucune donnée chargée")
+
+        # Transformer les données
+        exported_data = self._export_transform(self.data, target_language, mode)
+
+        # Sauvegarder
+        output_path = Path(output_path)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(exported_data, f, indent=2, ensure_ascii=False)
+
+        return True
+
+    def _export_transform(self, value: Any, target_language: str, mode: str) -> Any:
+        """
+        Transforme récursivement les données .got.json en JSON standard.
+
+        Args:
+            value: Valeur à transformer
+            target_language: Langue cible
+            mode: Mode d'export ("standard" ou "validated")
+
+        Returns:
+            Valeur transformée
+        """
+        # Ignorer le header __ollamafic__
+        if isinstance(value, dict) and "__ollamafic__" in value:
+            result = {}
+            for key, val in value.items():
+                if key != "__ollamafic__":
+                    result[key] = self._export_transform(val, target_language, mode)
+            return result
+
+        # Transformer les objets de traduction
+        if isinstance(value, dict) and "ori" in value:
+            return self._export_translation_object(value, target_language, mode)
+
+        # Traiter les dictionnaires normaux
+        if isinstance(value, dict):
+            return {k: self._export_transform(v, target_language, mode) for k, v in value.items()}
+
+        # Traiter les listes
+        if isinstance(value, list):
+            return [self._export_transform(item, target_language, mode) for item in value]
+
+        # Valeurs simples
+        return value
+
+    def _export_translation_object(self, obj: Dict, target_language: str, mode: str) -> str:
+        """
+        Exporte un objet de traduction en texte simple selon le mode.
+
+        Args:
+            obj: Objet de traduction {"ori": "...", "fr": {...}, ...}
+            target_language: Langue cible
+            mode: "standard" ou "validated"
+
+        Returns:
+            Texte à utiliser dans l'export
+        """
+        original = obj.get("ori", "")
+
+        # Vérifier si la traduction existe
+        if target_language not in obj:
+            return original
+
+        translation_data = obj[target_language]
+
+        # Si c'est un dict (format v2.0)
+        if isinstance(translation_data, dict):
+            translation_text = translation_data.get("text", "")
+            is_validated = translation_data.get("valid", False)
+
+            # Mode "validated" : n'utiliser que si validé
+            if mode == "validated":
+                if is_validated and translation_text.strip():
+                    return translation_text
+                else:
+                    return original
+
+            # Mode "standard" : utiliser si non vide
+            else:  # mode == "standard"
+                if translation_text.strip():
+                    return translation_text
+                else:
+                    return original
+
+        # Si c'est une string (ancien format ou erreur)
+        elif isinstance(translation_data, str):
+            if translation_data.strip():
+                return translation_data
+            else:
+                return original
+
+        # Cas par défaut
+        return original
+
+    def get_export_stats(self, target_language: str, mode: str = "standard") -> Dict:
+        """
+        Calcule les statistiques d'un export potentiel.
+
+        Args:
+            target_language: Langue cible
+            mode: Mode d'export
+
+        Returns:
+            Dict avec les statistiques:
+            {
+                "total_entries": int,
+                "translated_entries": int,  # Nombre d'entrées qui utiliseront la traduction
+                "original_entries": int,    # Nombre d'entrées qui utiliseront l'original
+                "percentage": float         # Pourcentage traduit
+            }
+        """
+        stats = {
+            "total_entries": 0,
+            "translated_entries": 0,
+            "original_entries": 0,
+            "percentage": 0.0
+        }
+
+        def count_entries(value):
+            if isinstance(value, dict) and "ori" in value:
+                stats["total_entries"] += 1
+
+                # Vérifier si on utiliserait la traduction
+                if target_language in value:
+                    translation_data = value[target_language]
+
+                    if isinstance(translation_data, dict):
+                        translation_text = translation_data.get("text", "")
+                        is_validated = translation_data.get("valid", False)
+
+                        if mode == "validated":
+                            if is_validated and translation_text.strip():
+                                stats["translated_entries"] += 1
+                            else:
+                                stats["original_entries"] += 1
+                        else:  # standard
+                            if translation_text.strip():
+                                stats["translated_entries"] += 1
+                            else:
+                                stats["original_entries"] += 1
+                    else:
+                        stats["original_entries"] += 1
+                else:
+                    stats["original_entries"] += 1
+
+            elif isinstance(value, dict):
+                for v in value.values():
+                    count_entries(v)
+            elif isinstance(value, list):
+                for item in value:
+                    count_entries(item)
+
+        if self.data:
+            count_entries(self.data)
+
+        if stats["total_entries"] > 0:
+            stats["percentage"] = (stats["translated_entries"] / stats["total_entries"]) * 100
+
+        return stats
 
 
 def migrate_old_to_new(old_got_path: str) -> None:

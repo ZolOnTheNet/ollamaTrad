@@ -64,13 +64,32 @@ class OptionsDialogV3(tk.Toplevel):
         self.language_entries = []  # Liste des paires (Entry code, Entry nom) pour le tableur
         self.visible_languages_vars = {}  # code -> BooleanVar
         self.allow_edit_ori_var = tk.BooleanVar()
+        self.auto_save_on_exit_var = tk.BooleanVar()
 
         # Variables IA
         self.ai_provider_var = tk.StringVar()
+
+        # Ollama
         self.ollama_model_var = tk.StringVar()
         self.ollama_host_var = tk.StringVar()
+
+        # OpenAI
         self.openai_api_key_var = tk.StringVar()
         self.openai_model_var = tk.StringVar()
+
+        # Mistral
+        self.mistral_api_key_var = tk.StringVar()
+        self.mistral_model_var = tk.StringVar()
+
+        # Anthropic
+        self.anthropic_api_key_var = tk.StringVar()
+        self.anthropic_model_var = tk.StringVar()
+
+        # DeepL (section séparée)
+        self.deepl_enabled_var = tk.BooleanVar()
+        self.deepl_api_key_var = tk.StringVar()
+        self.deepl_is_pro_var = tk.BooleanVar()
+        self.deepl_char_limit_var = tk.IntVar()  # Limite de caractères personnalisée
 
         # Variables prompts
         self.prompt_translate_var = tk.StringVar()
@@ -101,6 +120,7 @@ class OptionsDialogV3(tk.Toplevel):
             "target_languages": ["fr", "en", "es"],
             "visible_languages": ["fr", "en", "es"],
             "allow_edit_ori": False,
+            "auto_save_on_exit": False,
             "ai_config": {
                 "provider": "ollama",
                 "ollama": {
@@ -110,6 +130,20 @@ class OptionsDialogV3(tk.Toplevel):
                 "openai": {
                     "api_key": "",
                     "model": "gpt-4"
+                },
+                "mistral": {
+                    "api_key": "",
+                    "model": "mistral-large-latest"
+                },
+                "anthropic": {
+                    "api_key": "",
+                    "model": "claude-3-sonnet-20240229"
+                },
+                "deepl": {
+                    "enabled": False,
+                    "api_key": "",
+                    "is_pro": False,
+                    "character_limit": 500000  # 500K caractères (limite gratuite DeepL)
                 }
             },
             "prompts": {
@@ -447,7 +481,12 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
         ttk.Label(provider_frame, text="Sélectionnez le fournisseur d'IA à utiliser:",
                  font=("Arial", 9, "italic")).pack(anchor="w", pady=(0, 5))
 
-        providers = [("Ollama (local)", "ollama"), ("OpenAI", "openai")]
+        providers = [
+            ("Ollama (local)", "ollama"),
+            ("OpenAI", "openai"),
+            ("Mistral AI", "mistral"),
+            ("Anthropic Claude", "anthropic")
+        ]
         for text, value in providers:
             ttk.Radiobutton(provider_frame, text=text, variable=self.ai_provider_var,
                           value=value, command=self._on_provider_changed).pack(anchor="w", pady=2)
@@ -480,6 +519,40 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
 
         self.openai_config_frame.columnconfigure(1, weight=1)
 
+        # Configuration Mistral
+        self.mistral_config_frame = ttk.LabelFrame(scrollable_frame, text="⚙️ Configuration Mistral AI", padding=10)
+        self.mistral_config_frame.pack(fill="x", padx=10, pady=10)
+
+        ttk.Label(self.mistral_config_frame, text="Clé API:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        ttk.Entry(self.mistral_config_frame, textvariable=self.mistral_api_key_var,
+                 width=40, show="*").grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+
+        ttk.Label(self.mistral_config_frame, text="Modèle:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        ttk.Entry(self.mistral_config_frame, textvariable=self.mistral_model_var,
+                 width=40).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+
+        ttk.Label(self.mistral_config_frame, text="(ex: mistral-large-latest)",
+                 font=("Arial", 8), foreground="gray").grid(row=2, column=1, sticky="w", padx=5)
+
+        self.mistral_config_frame.columnconfigure(1, weight=1)
+
+        # Configuration Anthropic
+        self.anthropic_config_frame = ttk.LabelFrame(scrollable_frame, text="⚙️ Configuration Anthropic (Claude)", padding=10)
+        self.anthropic_config_frame.pack(fill="x", padx=10, pady=10)
+
+        ttk.Label(self.anthropic_config_frame, text="Clé API:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        ttk.Entry(self.anthropic_config_frame, textvariable=self.anthropic_api_key_var,
+                 width=40, show="*").grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+
+        ttk.Label(self.anthropic_config_frame, text="Modèle:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        ttk.Entry(self.anthropic_config_frame, textvariable=self.anthropic_model_var,
+                 width=40).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+
+        ttk.Label(self.anthropic_config_frame, text="(ex: claude-3-sonnet-20240229)",
+                 font=("Arial", 8), foreground="gray").grid(row=2, column=1, sticky="w", padx=5)
+
+        self.anthropic_config_frame.columnconfigure(1, weight=1)
+
         # Bouton de test
         test_frame = ttk.Frame(scrollable_frame)
         test_frame.pack(fill="x", padx=10, pady=10)
@@ -491,16 +564,166 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
         self.test_result_label = ttk.Label(test_frame, text="", font=("Arial", 9))
         self.test_result_label.pack(side="left", padx=10)
 
+        # Séparateur
+        ttk.Separator(scrollable_frame, orient="horizontal").pack(fill="x", padx=10, pady=20)
+
+        # Configuration DeepL (section séparée, pas un provider IA)
+        deepl_section = ttk.LabelFrame(scrollable_frame, text="🌐 DeepL - Traduction Professionnelle", padding=10)
+        deepl_section.pack(fill="x", padx=10, pady=10)
+
+        ttk.Label(deepl_section,
+                 text="DeepL est un service de traduction séparé, indépendant des providers IA.",
+                 font=("Arial", 9, "italic")).pack(anchor="w", pady=(0, 10))
+
+        # Checkbox pour activer DeepL
+        ttk.Checkbutton(deepl_section,
+                       text="✅ Activer DeepL pour la traduction",
+                       variable=self.deepl_enabled_var,
+                       command=self._on_deepl_enabled_changed).pack(anchor="w", pady=5)
+
+        # Frame de configuration DeepL
+        self.deepl_config_frame = ttk.Frame(deepl_section)
+        self.deepl_config_frame.pack(fill="x", pady=10)
+
+        ttk.Label(self.deepl_config_frame, text="Clé API:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        ttk.Entry(self.deepl_config_frame, textvariable=self.deepl_api_key_var,
+                 width=40, show="*").grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+
+        ttk.Label(self.deepl_config_frame,
+                 text="(Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx)",
+                 font=("Arial", 8), foreground="gray").grid(row=1, column=1, sticky="w", padx=5)
+
+        ttk.Checkbutton(self.deepl_config_frame,
+                       text="💳 Compte Pro (api.deepl.com)",
+                       variable=self.deepl_is_pro_var).grid(row=2, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+
+        ttk.Label(self.deepl_config_frame,
+                 text="ℹ️ Compte gratuit: 500,000 chars/mois | Compte Pro: facturation selon volume",
+                 font=("Arial", 8), foreground="blue").grid(row=3, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+
+        ttk.Label(self.deepl_config_frame,
+                 text="⚠️ DeepL est un service de traduction pur (pas de chat). Utilisez le bouton 'Dpl' dans le formulaire.",
+                 font=("Arial", 8), foreground="orange").grid(row=4, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+
+        # Séparateur
+        ttk.Separator(self.deepl_config_frame, orient="horizontal").grid(row=5, column=0, columnspan=2, sticky="ew", padx=5, pady=10)
+
+        # Compteur de caractères
+        ttk.Label(self.deepl_config_frame, text="📊 Compteur de caractères:",
+                 font=("Arial", 9, "bold")).grid(row=6, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 0))
+
+        # Affichage du compteur actuel (sera mis à jour dynamiquement)
+        self.deepl_char_count_label = ttk.Label(self.deepl_config_frame,
+                                               text="Chargement...",
+                                               font=("Arial", 9))
+        self.deepl_char_count_label.grid(row=7, column=0, columnspan=2, sticky="w", padx=5, pady=2)
+
+        # Limite personnalisée
+        ttk.Label(self.deepl_config_frame, text="Limite personnalisée:").grid(row=8, column=0, sticky="w", padx=5, pady=5)
+        limit_frame = ttk.Frame(self.deepl_config_frame)
+        limit_frame.grid(row=8, column=1, sticky="ew", padx=5, pady=5)
+
+        limit_entry = ttk.Entry(limit_frame, textvariable=self.deepl_char_limit_var, width=15)
+        limit_entry.pack(side="left", padx=(0, 5))
+        # Mettre à jour l'affichage quand la limite change
+        self.deepl_char_limit_var.trace_add("write", lambda *args: self._update_deepl_counter_display())
+        ttk.Label(limit_frame, text="caractères",
+                 font=("Arial", 8), foreground="gray").pack(side="left")
+
+        ttk.Label(self.deepl_config_frame,
+                 text="(0 = pas de limite)",
+                 font=("Arial", 8), foreground="gray").grid(row=9, column=1, sticky="w", padx=5)
+
+        # Bouton de réinitialisation
+        self.deepl_reset_button = ttk.Button(self.deepl_config_frame,
+                                            text="🔄 Réinitialiser le compteur",
+                                            command=self._reset_deepl_counter)
+        self.deepl_reset_button.grid(row=10, column=0, columnspan=2, sticky="w", padx=5, pady=10)
+
+        self.deepl_config_frame.columnconfigure(1, weight=1)
+
     def _on_provider_changed(self):
         """Affiche/masque les configurations selon le fournisseur sélectionné"""
         provider = self.ai_provider_var.get()
 
+        # Masquer tous les frames des providers IA (pas DeepL, il a sa propre section)
+        self.ollama_config_frame.pack_forget()
+        self.openai_config_frame.pack_forget()
+        self.mistral_config_frame.pack_forget()
+        self.anthropic_config_frame.pack_forget()
+
+        # Afficher le frame correspondant
         if provider == "ollama":
             self.ollama_config_frame.pack(fill="x", padx=10, pady=10)
-            self.openai_config_frame.pack_forget()
         elif provider == "openai":
-            self.ollama_config_frame.pack_forget()
             self.openai_config_frame.pack(fill="x", padx=10, pady=10)
+        elif provider == "mistral":
+            self.mistral_config_frame.pack(fill="x", padx=10, pady=10)
+        elif provider == "anthropic":
+            self.anthropic_config_frame.pack(fill="x", padx=10, pady=10)
+
+    def _on_deepl_enabled_changed(self):
+        """Active/désactive le frame de configuration DeepL"""
+        if self.deepl_enabled_var.get():
+            # Activer les widgets du frame
+            for child in self.deepl_config_frame.winfo_children():
+                try:
+                    child.config(state="normal")
+                except:
+                    pass
+        else:
+            # Désactiver les widgets du frame
+            for child in self.deepl_config_frame.winfo_children():
+                try:
+                    child.config(state="disabled")
+                except:
+                    pass
+
+    def _reset_deepl_counter(self):
+        """Réinitialise le compteur de caractères DeepL"""
+        if messagebox.askyesno("Confirmer",
+                              "Voulez-vous vraiment réinitialiser le compteur de caractères DeepL ?"):
+            if self.ai_client and "deepl" in self.ai_client.providers:
+                self.ai_client.providers["deepl"].reset_character_count()
+                self._update_deepl_counter_display()
+                messagebox.showinfo("Succès", "Le compteur DeepL a été réinitialisé.")
+            else:
+                messagebox.showwarning("Attention", "Le provider DeepL n'est pas disponible.")
+
+    def _update_deepl_counter_display(self):
+        """Met à jour l'affichage du compteur DeepL"""
+        try:
+            if self.ai_client and "deepl" in self.ai_client.providers:
+                char_count = self.ai_client.providers["deepl"].get_character_count()
+
+                # Récupérer la limite de manière sécurisée
+                try:
+                    limit = self.deepl_char_limit_var.get()
+                except:
+                    limit = 0
+
+                # Formater l'affichage
+                if limit > 0:
+                    percentage = (char_count / limit) * 100
+                    text = f"  Utilisé: {char_count:,} / {limit:,} caractères ({percentage:.1f}%)"
+
+                    # Changer la couleur selon le pourcentage
+                    if percentage >= 90:
+                        color = "red"
+                    elif percentage >= 70:
+                        color = "orange"
+                    else:
+                        color = "green"
+                else:
+                    text = f"  Utilisé: {char_count:,} caractères (pas de limite)"
+                    color = "blue"
+
+                self.deepl_char_count_label.config(text=text, foreground=color)
+            else:
+                self.deepl_char_count_label.config(text="  DeepL non disponible", foreground="gray")
+        except Exception as e:
+            # En cas d'erreur, afficher un message générique
+            self.deepl_char_count_label.config(text="  Erreur de chargement", foreground="gray")
 
     def _test_ia_connection(self):
         """Teste la connexion au fournisseur d'IA"""
@@ -633,6 +856,26 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
                  text="⚠️ Attention: Modifier le texte original peut affecter toutes les traductions liées.",
                  font=("Arial", 8), foreground="orange").pack(anchor="w", pady=(5, 0))
 
+        # Section: Sauvegarde automatique
+        autosave_frame = ttk.LabelFrame(container, text="💾 Sauvegarde Automatique", padding=10)
+        autosave_frame.pack(fill="x", pady=10)
+
+        ttk.Label(autosave_frame,
+                 text="Configure le comportement de sauvegarde lors de la fermeture de l'application.",
+                 font=("Arial", 9, "italic")).pack(anchor="w", pady=(0, 5))
+
+        ttk.Checkbutton(autosave_frame,
+                       text="✅ Sauvegarder automatiquement le fichier .got.json à la fermeture",
+                       variable=self.auto_save_on_exit_var).pack(anchor="w", pady=5)
+
+        ttk.Label(autosave_frame,
+                 text="Si désactivé : un message vous demandera si vous souhaitez sauvegarder (Oui/Non/Annuler)",
+                 font=("Arial", 8), foreground="gray").pack(anchor="w", pady=(5, 0))
+
+        ttk.Label(autosave_frame,
+                 text="Si activé : le fichier sera sauvegardé automatiquement sans confirmation",
+                 font=("Arial", 8), foreground="gray").pack(anchor="w", pady=(2, 0))
+
         # Section: Informations
         info_frame = ttk.LabelFrame(container, text="ℹ️ Informations", padding=10)
         info_frame.pack(fill="x", pady=10)
@@ -675,6 +918,9 @@ Fichier de configuration: translation_config.json
         # Option édition ori
         self.allow_edit_ori_var.set(self.config.get("allow_edit_ori", False))
 
+        # Option sauvegarde automatique
+        self.auto_save_on_exit_var.set(self.config.get("auto_save_on_exit", False))
+
         # Configuration IA
         ai_config = self.config.get("ai_config", {})
         self.ai_provider_var.set(ai_config.get("provider", "ollama"))
@@ -687,7 +933,23 @@ Fichier de configuration: translation_config.json
         self.openai_api_key_var.set(openai_config.get("api_key", ""))
         self.openai_model_var.set(openai_config.get("model", "gpt-4"))
 
+        mistral_config = ai_config.get("mistral", {})
+        self.mistral_api_key_var.set(mistral_config.get("api_key", ""))
+        self.mistral_model_var.set(mistral_config.get("model", "mistral-large-latest"))
+
+        anthropic_config = ai_config.get("anthropic", {})
+        self.anthropic_api_key_var.set(anthropic_config.get("api_key", ""))
+        self.anthropic_model_var.set(anthropic_config.get("model", "claude-3-sonnet-20240229"))
+
+        deepl_config = ai_config.get("deepl", {})
+        self.deepl_enabled_var.set(deepl_config.get("enabled", False))
+        self.deepl_api_key_var.set(deepl_config.get("api_key", ""))
+        self.deepl_is_pro_var.set(deepl_config.get("is_pro", False))
+        self.deepl_char_limit_var.set(deepl_config.get("character_limit", 500000))  # 500K par défaut (limite gratuite)
+
         self._on_provider_changed()  # Afficher le bon panneau
+        self._on_deepl_enabled_changed()  # Activer/désactiver le frame DeepL
+        self._update_deepl_counter_display()  # Mettre à jour l'affichage du compteur
 
         # Prompts
         prompts = self.config.get("prompts", {})
@@ -745,6 +1007,20 @@ Fichier de configuration: translation_config.json
             "openai": {
                 "api_key": self.openai_api_key_var.get().strip(),
                 "model": self.openai_model_var.get().strip()
+            },
+            "mistral": {
+                "api_key": self.mistral_api_key_var.get().strip(),
+                "model": self.mistral_model_var.get().strip()
+            },
+            "anthropic": {
+                "api_key": self.anthropic_api_key_var.get().strip(),
+                "model": self.anthropic_model_var.get().strip()
+            },
+            "deepl": {
+                "enabled": self.deepl_enabled_var.get(),
+                "api_key": self.deepl_api_key_var.get().strip(),
+                "is_pro": self.deepl_is_pro_var.get(),
+                "character_limit": self.deepl_char_limit_var.get()
             }
         }
 
@@ -766,18 +1042,58 @@ Fichier de configuration: translation_config.json
         self.config["target_languages"] = target_langs
         self.config["visible_languages"] = visible_langs
         self.config["allow_edit_ori"] = self.allow_edit_ori_var.get()
+        self.config["auto_save_on_exit"] = self.auto_save_on_exit_var.get()
         self.config["ai_config"] = ai_config
         self.config["prompts"] = prompts
 
         # Sauvegarder
         if self.save_config():
-            messagebox.showinfo("Succès", "Configuration sauvegardée avec succès!")
+            # Mettre à jour settings.json avec les configurations IA
+            self._sync_ai_config_to_settings(ai_config)
 
             # Appeler le callback si fourni
             if self.on_save_callback:
                 self.on_save_callback(self.config)
 
+            # Libérer le grab et détruire la fenêtre AVANT d'afficher le message
+            self.grab_release()
             self.destroy()
+
+            # Afficher le message de succès (après la fermeture de la fenêtre)
+            messagebox.showinfo("Succès", "Configuration sauvegardée avec succès!")
+
+    def _sync_ai_config_to_settings(self, ai_config: Dict):
+        """Synchronise la configuration IA vers settings.json"""
+        try:
+            settings_path = Path(__file__).parent.parent / "config" / "settings.json"
+
+            if settings_path.exists():
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+            else:
+                settings = {"ai_providers": {}}
+
+            # Mettre à jour la section ai_providers
+            if "ai_providers" not in settings:
+                settings["ai_providers"] = {}
+
+            # Copier les configurations
+            for provider in ["ollama", "openai", "mistral", "anthropic", "deepl"]:
+                if provider in ai_config:
+                    if provider not in settings["ai_providers"]:
+                        settings["ai_providers"][provider] = {}
+
+                    settings["ai_providers"][provider].update(ai_config[provider])
+
+            # Mettre à jour le provider par défaut
+            settings["ai_providers"]["default_provider"] = ai_config["provider"]
+
+            # Sauvegarder
+            with open(settings_path, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, indent=2, ensure_ascii=False)
+
+        except Exception as e:
+            print(f"Avertissement: Impossible de synchroniser avec settings.json: {e}")
 
     def _on_reset(self):
         """Réinitialise aux valeurs par défaut"""
@@ -789,6 +1105,7 @@ Fichier de configuration: translation_config.json
             default_config["target_languages"] = ["fr", "en", "es"]
             default_config["visible_languages"] = ["fr", "en", "es"]
             default_config["allow_edit_ori"] = False
+            default_config["auto_save_on_exit"] = False
 
             self.config = default_config
             self._load_values()

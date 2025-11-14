@@ -1,0 +1,2246 @@
+{
+  "__ollamafic__": {
+    "version": "2.0",
+    "original_file": "dh-uosrd.adv.test.json",
+    "created": "2025-11-11T23:52:29.723328",
+    "last_modified": "2025-11-12T23:33:32.591734"
+  },
+  "label": {
+    "ori": "adversaires",
+    "fr": {
+      "text": "",
+      "history": [],
+      "valid": false
+    },
+    "es": {
+      "text": "",
+      "history": [],
+      "valid": false
+    },
+    "de": {
+      "text": "",
+      "history": [],
+      "valid": false
+    }
+  },
+  "mapping": {
+    "description": {
+      "ori": "system.biography",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Arm1Nom": {
+      "ori": "system.weapon-main.name",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Arm1Portee": {
+      "ori": "system.weapon-main.range",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Arm1DmgType": {
+      "ori": "system.weapon-main.dmgType",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Arm1Desc": {
+      "ori": "system.weapon-main.description",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Arm2Nom": {
+      "ori": "system.weapon-off.name",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Arm2Portee": {
+      "ori": "system.weapon-off.range",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Arm2DmgType": {
+      "ori": "system.weapon-off.dmgType",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Arm2Dsc": {
+      "ori": "system.weapon-off.description",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    }
+  },
+  "folders": {
+    "Tier 1": {
+      "ori": "Niveau 1",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Tier 4": {
+      "ori": "Niveau 4",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Tier 3": {
+      "ori": "Niveau 3",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Socials": {
+      "ori": "Sociaux",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Tier 2": {
+      "ori": "Niveau 2",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Ranged": {
+      "ori": "À distance",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Minions": {
+      "ori": "Sbires",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Skulks": {
+      "ori": "Rôdeurs",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Standards": {
+      "ori": "Standards",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Bruisers": {
+      "ori": "Brutes",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Solos": {
+      "ori": "Solitaires",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Supports": {
+      "ori": "Soutiens",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Leaders": {
+      "ori": "Meneurs",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    },
+    "Hordes": {
+      "ori": "Hordes",
+      "fr": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "es": {
+        "text": "",
+        "history": [],
+        "valid": false
+      },
+      "de": {
+        "text": "",
+        "history": [],
+        "valid": false
+      }
+    }
+  },
+  "entries": {
+    "Electric Eels": {
+      "name": {
+        "ori": "Electric EelsXXX",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "tokenName": {
+        "ori": "Anguilles Electriques",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "description": {
+        "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A swarm of eels that encircle and electrocute.</p><h4>MOTIVES &amp; TACTICS</h4><p>Avoid larger predators, shock prey, tear apart</p><hr /><h1>EXPERIENCE</h1><p></p><hr /><h1>FEATURES</h1><ul><li>Horde (2d4+1) - Passive: When the Eels have marked half or more of their HP, their standard attack deals 2d4+1 physical damage instead.</li><li>Paralyzing Shock - Action: Mark a Stress to make a standard attack against all targets within Very Close range. You gain a Fear for each target that marks HP.</li></ul>",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Nom": {
+        "ori": "Shocking Bite",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Portee": {
+        "ori": "melée",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1DmgType": {
+        "ori": "Physique",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Desc": {
+        "ori": "Melée | ATK: +0| Phys",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Nom": {
+        "ori": "Fist",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Portee": {
+        "ori": "melee",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2DmgType": {
+        "ori": "physical",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Dsc": {
+        "ori": "Range | 1H | Trait",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      }
+    },
+    "Vault Guardian Gaoler": {
+      "name": {
+        "ori": "Vault Guardian Gaoler",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "tokenName": {
+        "ori": "Vault Guardian Gaoler",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "description": {
+        "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A boxy, dust-covered construct with thick metallic swinging doors on their torso.</p><h4>MOTIVES &amp; TACTICS</h4><p>Carry away, entrap, protect, pummel</p><hr /><h1>EXPERIENCE</h1><p></p><hr /><h1>FEATURES</h1><ul><li>Blocking Shield - Passive: Creatures within Melee range of the Gaoler have disadvantage on attack rolls against them. Creatures trapped inside the Gaoler are immune to this feature.</li><li>Lock Up - Action: Mark a Stress to make an attack against a target within Very Close range. On a success, the target is Restrained within the Gaoler until freed with a successful Strength Roll (18). While Restrained, the target can only attack the Gaoler.</li></ul>",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Nom": {
+        "ori": "Body Bash",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Portee": {
+        "ori": "melée",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1DmgType": {
+        "ori": "Physique",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Desc": {
+        "ori": "Très Près | ATK: +2| 3d6+2 Phys",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Nom": {
+        "ori": "Fist",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Portee": {
+        "ori": "melee",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2DmgType": {
+        "ori": "physical",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Dsc": {
+        "ori": "Range | 1H | Trait",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      }
+    },
+    "Deeproot Defender": {
+      "name": {
+        "ori": "Défenseur Racine-Profonde",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "tokenName": {
+        "ori": "Deeproot Defender",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "description": {
+        "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A burly vegetable-person with grasping vines.</p><h4>MOTIVES &amp; TACTICS</h4><p>Ambush, grab, protect, pummel</p><hr /><h1>EXPERIENCE</h1><p>Huge +3</p><hr /><h1>FEATURES</h1><ul><li>Ground Slam - Action: Slam the ground, knocking all targets within Very Close range back to Far range. Each target knocked back this way must mark a Stress.</li><li>Grab and Drag - Action: Make an attack against a target within Close range. On a success, spend a Fear to pull them into Melee range, deal 1d6+2 physical damage, and Restrain them until the Defender takes Severe damage.</li></ul>",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Nom": {
+        "ori": "Vines",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Portee": {
+        "ori": "melée",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1DmgType": {
+        "ori": "Physique",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Desc": {
+        "ori": "Près | ATK: +2| Phys",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Nom": {
+        "ori": "Fist",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Portee": {
+        "ori": "melee",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2DmgType": {
+        "ori": "physical",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Dsc": {
+        "ori": "Range | 1H | Trait",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      }
+    },
+    "Young Ice Dragon": {
+      "name": {
+        "ori": "Young Ice Dragon",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "tokenName": {
+        "ori": "Young Ice Dragon",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "description": {
+        "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A glacier-blue dragon with four powerful limbs and frost-tinged wings.</p><h4>MOTIVES &amp; TACTICS</h4><p>Avalanche, defend lair, fly, freeze, defend what is mine, maul</p><hr /><h1>EXPERIENCE</h1><p>Protect What Is Mine +3</p><hr /><h1>FEATURES</h1><ul><li>Relentless (3) - Passive: The Dragon can be spotlighted up to three times per GM turn. Spend Fear as usual to spotlight them.</li><li>Rend and Crush - Passive: If a target damaged by the Dragon doesn’t mark an Armor Slot to reduce the damage, they must mark a Stress.</li><li>No Hope - Passive: When a PC rolls with Fear while within Far range of the Dragon, they lose a Hope.</li><li>Blizzard Breath - Action: Spend 2 Fear to release an icy whorl in front of the Dragon within Close range. All targets in this area must make an Agility Reaction Roll. Targets who fail take 4d6+5 magic damage and are Restrained by ice until they break free with a successful Strength Roll. Targets who succeed must mark 2 Stress or take half damage.</li><li>Avalanche - Action: Spend a Fear to have the Dragon unleash a huge downfall of snow and ice, covering all other creatures within Far range. All targets within this area must succeed on an Instinct Reaction Roll or be buried in snow and rocks, becoming Vulnerable until they dig themselves out from the debris. For each PC that fails the reaction roll, you gain a Fear.</li><li>Frozen Scales - Reaction: When a creature makes a successful attack against the Dragon from within Very Close range, they must mark a Stress and become Chilled until their next rest or they clear a Stress. While they are Chilled, they have disadvantage on attack rolls.</li><li>Momentum - Reaction: When the Dragon makes a successful attack against a PC, you gain a Fear.</li></ul>",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Nom": {
+        "ori": "Bite and Cros",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Portee": {
+        "ori": "melée",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1DmgType": {
+        "ori": "Physique",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Desc": {
+        "ori": "Près | ATK: +7| 4d10 Phys",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Nom": {
+        "ori": "Fist",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Portee": {
+        "ori": "melee",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2DmgType": {
+        "ori": "physical",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Dsc": {
+        "ori": "Range | 1H | Trait",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      }
+    },
+    "Spy": {
+      "name": {
+        "ori": "Spy",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "tokenName": {
+        "ori": "Spy",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "description": {
+        "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A skilled espionage agent with a knack for being in the right place to overhear secrets.</p><h4>MOTIVES &amp; TACTICS</h4><p>Cut and run, disguise appearance, eavesdrop</p><hr /><h1>EXPERIENCE</h1><p>Espionage +3</p><hr /><h1>FEATURES</h1><ul><li>Gathering Secrets - Action: Spend a Fear to describe how the Spy knows a secret about a PC in the scene.</li><li>Fly on the Wall - Reaction: When a PC or group is discussing something sensitive, you can mark a Stress to reveal that the Spy is present in the scene, observing them. If the Spy escapes the scene to report their findings, you gain 1d4 Fear.</li></ul>",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Nom": {
+        "ori": "Dagger",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Portee": {
+        "ori": "melée",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1DmgType": {
+        "ori": "Physique",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Desc": {
+        "ori": "Melée | ATK: -2| 2d6+3 Phys",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Nom": {
+        "ori": "Fist",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Portee": {
+        "ori": "melee",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2DmgType": {
+        "ori": "physical",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Dsc": {
+        "ori": "Range | 1H | Trait",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      }
+    },
+    "Demon of Avarice": {
+      "name": {
+        "ori": "Démon de l'Avarice",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "tokenName": {
+        "ori": "Demon of Avarice",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "description": {
+        "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A regal cloaked monstrosity with circular horns adorned with treasure.</p><h4>MOTIVES &amp; TACTICS</h4><p>Consume, fuel greed, sow dissent</p><hr /><h1>EXPERIENCE</h1><p>Manipulation +3</p><hr /><h1>FEATURES</h1><ul><li>Money Talks - Passive: Attacks against the Demon are made with disadvantage unless the attacker spends a handful of gold. This Demon starts with a number of handfuls equal to the number of PCs. When a target marks HP from the Demon’s standard attack, they can spend a handful of gold instead of marking HP (1 handful per HP). Add a handful of gold to the Demon for each handful of gold spent by PCs on this feature.</li><li>Numbers Must Go Up - Passive: Add a bonus to the Demon’s attack rolls equal to the number of handfuls of gold they have.</li><li>Money Is Time - Action: Spend 3 handfuls of gold (or a Fear) to spotlight 1d4+1 allies.</li></ul>",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Nom": {
+        "ori": "Hungry Maw",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Portee": {
+        "ori": "melée",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1DmgType": {
+        "ori": "Physique",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Desc": {
+        "ori": "Melée | ATK: +2| Phys",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Nom": {
+        "ori": "Fist",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Portee": {
+        "ori": "melee",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2DmgType": {
+        "ori": "physical",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Dsc": {
+        "ori": "Range | 1H | Trait",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      }
+    },
+    "Giant Beastmaster": {
+      "name": {
+        "ori": "Géant Maître-Fauve",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "tokenName": {
+        "ori": "Giant Beastmaster",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "description": {
+        "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A leather-clad warrior bearing a whip and massive bow.</p><h4>MOTIVES &amp; TACTICS</h4><p>Command, make a living, maneuver, pin down, protect companion animals</p><hr /><h1>EXPERIENCE</h1><p>Animal Handling +3</p><hr /><h1>FEATURES</h1><ul><li>Two as One - Passive: When the Beastmaster is spotlighted, you can also spotlight a Tier 1 animal adversary currently under their control.</li><li>Pinning Strike - Action: Make a standard attack against a target. On a success, you can mark a Stress to pin them to a nearby surface. The pinned target is Restrained until they break free with a successful Finesse or Strength Roll.</li><li>Deadly Companion - Action: Twice per scene, summon a Bear, Dire Wolf, or similar Tier 1 animal adversary under the Beastmaster’s control. The adversary appears at Close range and is immediately spotlighted.</li></ul>",
+        "fr": {
+          "text": "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un guerrier vêtu de cuir portant un fouet et un arc massif.</p><h4>MOTIFS ET TACTIQUES</h4><p>Commander, gagner sa vie, manœuvrer, épingler, protéger les animaux de compagnie</p><hr /><h1>EXPÉRIENCE</h1><p>Maniement des animaux +3</p><hr /><h1>CARACTÉRISTIQUES</h1><ul><li>Deux en un - Passif : Lorsque le Beastmaster est mis en lumière, vous pouvez également mettre en lumière un adversaire animal de niveau 1 actuellement sous son contrôle.</li><li>Frappe d'immobilisation - Action : Effectuez une attaque standard contre une cible. En cas de succès, vous pouvez marquer une contrainte pour l'immobiliser sur une surface proche. La cible est immobilisée jusqu'à ce qu'elle se libère en réussissant un jet de Finesse ou de Force.</li><li>Compagnon mortel - Action : Deux fois par scène, invoquez un ours, un loup redoutable ou un adversaire animal similaire de niveau 1 sous le contrôle du Beastmaster. L'adversaire apparaît à bout portant et est immédiatement mis en lumière.</li></ul>",
+          "history": [],
+          "valid": true
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Nom": {
+        "ori": "Longbow",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Portee": {
+        "ori": "melée",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1DmgType": {
+        "ori": "Physique",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Desc": {
+        "ori": "Loin | ATK: +2| Phys",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Nom": {
+        "ori": "Fist",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Portee": {
+        "ori": "melee",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2DmgType": {
+        "ori": "physical",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Dsc": {
+        "ori": "Range | 1H | Trait",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      }
+    },
+    "Elite Soldier": {
+      "name": {
+        "ori": "Soldat d'Élite",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "tokenName": {
+        "ori": "Elite Soldier",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "description": {
+        "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>An armored squire or experienced commoner looking to advance.</p><h4>MOTIVES &amp; TACTICS</h4><p>Gain glory, keep order, make alliances</p><hr /><h1>EXPERIENCE</h1><p></p><hr /><h1>FEATURES</h1><ul><li>Reinforce - Action: Mark a Stress to move into Melee range of an ally and make a standard attack against a target within Very Close range. On a success, deal 2d10+2 physical damage and the ally can clear a Stress.</li><li>Vassal’s Loyalty - Reaction: When the Soldier is within Very Close range of a knight or other noble who would take damage, you can mark a Stress to move into Melee range of them and take the damage instead.</li></ul>",
+        "fr": {
+          "text": "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un écuyer en armure ou un roturier expérimenté qui cherche à progresser.</p><h4>MOTIVATIONS ET TACTIQUES</h4><p>Gagner en gloire, maintenir l'ordre, faire des alliances</p><hr /><h1>EXPÉRIENCE</h1><p></p><hr /><h1>CARACTÉRISTIQUES</h1><ul><li>Renforcer - Action : Marquez un Stress pour vous déplacer à portée de mêlée d'un allié et effectuer une attaque standard contre une cible à très courte portée. En cas de succès, 2d10+2 dégâts physiques sont infligés et l'allié peut se débarrasser d'un Stress.</li><li>Loyauté du vassal - Réaction : Lorsque le soldat se trouve à portée très proche d'un chevalier ou d'un autre noble qui subirait des dégâts, il peut marquer un stress pour se placer à portée de mêlée de la cible et subir les dégâts à sa place.</li></ul>",
+          "history": [],
+          "valid": true
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Nom": {
+        "ori": "Spear",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Portee": {
+        "ori": "melée",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1DmgType": {
+        "ori": "Physique",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Desc": {
+        "ori": "Très Près | ATK: +1| Phys",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Nom": {
+        "ori": "Fist",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Portee": {
+        "ori": "melee",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2DmgType": {
+        "ori": "physical",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Dsc": {
+        "ori": "Range | 1H | Trait",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      }
+    },
+    "Minor Fire Elemental": {
+      "name": {
+        "ori": "Minor Fire Elemental",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "tokenName": {
+        "ori": "Minor Fire Elemental",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "description": {
+        "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A living flame the size of a large bonfire.</p><h4>MOTIVES &amp; TACTICS</h4><p>Encircle enemies, grow in size, intimidate, start fires</p><hr /><h1>EXPERIENCE</h1><p></p><hr /><h1>FEATURES</h1><ul><li>Relentless (2) - Passive: The Elemental can be spotlighted up to two times per GM turn. Spend Fear as usual to spotlight them.</li><li>Scorched Earth - Action: Mark a Stress to choose a point within Far range. The ground within Very Close range of that point immediately bursts into flames. All creatures within this area must make an Agility Reaction Roll. Targets who fail take 2d8 magic damage from the flames. Targets who succeed take half damage.</li><li>Explosion - Action: Spend a Fear to erupt in a fiery explosion. Make an attack against all targets within Close range. Targets the Elemental succeeds against take 1d8 magic damage and are knocked back to Far range.</li><li>Consume Kindling - Reaction: Three times per scene, when the Elemental moves onto objects that are highly flammable, consume them to clear a HP or a Stress.</li><li>Momentum - Reaction: When the Elemental makes a successful attack against a PC, you gain a Fear.</li></ul>",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Nom": {
+        "ori": "Elemental Blast",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Portee": {
+        "ori": "melée",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1DmgType": {
+        "ori": "Physique",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm1Desc": {
+        "ori": "Loin | ATK: +3| Phys",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Nom": {
+        "ori": "Fist",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Portee": {
+        "ori": "melee",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2DmgType": {
+        "ori": "physical",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      },
+      "Arm2Dsc": {
+        "ori": "Range | 1H | Trait",
+        "fr": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "es": {
+          "text": "",
+          "history": [],
+          "valid": false
+        },
+        "de": {
+          "text": "",
+          "history": [],
+          "valid": false
+        }
+      }
+    }
+  }
+}

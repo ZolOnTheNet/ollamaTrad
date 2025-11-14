@@ -3,7 +3,7 @@
     "version": "2.0",
     "original_file": "dhtest.json",
     "created": "2025-10-13T16:38:16.059627",
-    "last_modified": "2025-10-24T14:22:01.142536"
+    "last_modified": "2025-10-28T17:26:21.475311"
   },
   "label": {
     "ori": "adversaires",
@@ -867,7 +867,7 @@
       "name": {
         "ori": "Défenseur Racine-Profonde",
         "fr": {
-          "text": "",
+          "text": "Défenseur Racine-Profonde",
           "history": [],
           "valid": false
         },
@@ -1080,7 +1080,7 @@
       "name": {
         "ori": "Young Ice Dragon",
         "fr": {
-          "text": "",
+          "text": "Jeune Dragon de Glace",
           "history": [],
           "valid": false
         },
@@ -1213,7 +1213,7 @@
       "Arm2Nom": {
         "ori": "Fist",
         "fr": {
-          "text": "",
+          "text": "Poing",
           "history": [],
           "valid": false
         },
@@ -1343,7 +1343,7 @@
       "Arm1Nom": {
         "ori": "Dagger",
         "fr": {
-          "text": "",
+          "text": "Dague",
           "history": [],
           "valid": false
         },
@@ -1415,7 +1415,7 @@
       "Arm2Nom": {
         "ori": "Fist",
         "fr": {
-          "text": "",
+          "text": "Poing",
           "history": [],
           "valid": false
         },
@@ -1489,9 +1489,9 @@
       "name": {
         "ori": "Démon de l'Avarice",
         "fr": {
-          "text": "",
+          "text": "Démon de l'Avarice",
           "history": [],
-          "valid": false
+          "valid": true
         },
         "es": {
           "text": "",
@@ -1507,9 +1507,11 @@
       "tokenName": {
         "ori": "Demon of Avarice",
         "fr": {
-          "text": "",
-          "history": [],
-          "valid": false
+          "text": "Démon de l'Avarice",
+          "history": [
+            "Démon de l'Avare"
+          ],
+          "valid": true
         },
         "es": {
           "text": "",
@@ -1525,9 +1527,11 @@
       "description": {
         "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A regal cloaked monstrosity with circular horns adorned with treasure.</p><h4>MOTIVES &amp; TACTICS</h4><p>Consume, fuel greed, sow dissent</p><hr /><h1>EXPERIENCE</h1><p>Manipulation +3</p><hr /><h1>FEATURES</h1><ul><li>Money Talks - Passive: Attacks against the Demon are made with disadvantage unless the attacker spends a handful of gold. This Demon starts with a number of handfuls equal to the number of PCs. When a target marks HP from the Demon’s standard attack, they can spend a handful of gold instead of marking HP (1 handful per HP). Add a handful of gold to the Demon for each handful of gold spent by PCs on this feature.</li><li>Numbers Must Go Up - Passive: Add a bonus to the Demon’s attack rolls equal to the number of handfuls of gold they have.</li><li>Money Is Time - Action: Spend 3 handfuls of gold (or a Fear) to spotlight 1d4+1 allies.</li></ul>",
         "fr": {
-          "text": "",
-          "history": [],
-          "valid": false
+          "text": "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un monstre crâneur aux cornes circulaires orné de trésors.</p><h4>MOTIVATIONS ET TACTIQUES</h4><p>Consommer, alimenter la cupidité, semer le mécontentement</p><hr /><h1>EXPERIENCE</h1><p>Manipulation +3</p><hr /><h1>COMPETENCES</h1><ul><li>L'argent parle - Passif : Les attaques contre le Démon sont effectuées avec un désavantage à moins que l'attaquant ne dépense une poignée d'or. Ce Démon commence avec un nombre de poignées égal au nombre de PC. Lorsque la cible marque des PV du coup de griffes standard du Démon, elle peut dépenser une poignée d'or plutôt que de marquer des PV (1 poignée par PV). Ajoutez une poignée d'or au Démon pour chaque poignée d'or dépensée par les PC sur cette fonctionnalité.</li><li>Les nombres doivent augmenter - Passif : Ajoutez un bonus aux jets d'attaque du Démon égal au nombre de poignées d'or dont il dispose.</li><li>L'argent, c'est le temps - Action : dépensez 3 poignées d'or (ou une Peur) pour mettre en lumière 1d4+1 alliés.</li></ul>",
+          "history": [
+            "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un monstre crâneur aux cornes circulaires orné de trésors.</p><h4>MOTIVES ET TACTIQUES</h4><p>Consommer, alimenter la cupidité, semer le mécontentement</p><hr /><h1>EXPERIENCE</h1><p>Manipulation +3</p><hr /><h1>CARRISUES</h1><ul><li>L'argent parle - Passif : Les attaques contre le Démon sont effectuées avec un désavantage à moins que l'attaquant ne dépense une poignée d'or. Ce Démon commence avec un nombre de poignées égal au nombre de PC. Lorsque la cible marque des PV du coup de griffes standard du Démon, elle peut dépenser une poignée d'or plutôt que de marquer des PV (1 poignée par PV). Ajoutez une poignée d'or au Démon pour chaque poignée d'or dépensée par les PC sur cette fonctionnalité.</li><li>Les nombres doivent augmenter - Passif : Ajoutez un bonus aux jets d'attaque du Démon égal au nombre de poignées d'or dont il dispose.</li><li>L'argent, c'est le temps - Action : dépensez 3 poignées d'or (ou une Peur) pour mettre en lumière 1d4+1 alliés.</li></ul>"
+          ],
+          "valid": true
         },
         "es": {
           "text": "",
@@ -1543,9 +1547,13 @@
       "Arm1Nom": {
         "ori": "Hungry Maw",
         "fr": {
-          "text": "",
-          "history": [],
-          "valid": false
+          "text": "Grande Gueule",
+          "history": [
+            "Grande Guele",
+            "Grande Faim",
+            "Grand Faim"
+          ],
+          "valid": true
         },
         "es": {
           "text": "",
@@ -1561,9 +1569,9 @@
       "Arm1Portee": {
         "ori": "melée",
         "fr": {
-          "text": "",
+          "text": "Melée",
           "history": [],
-          "valid": false
+          "valid": true
         },
         "es": {
           "text": "",
@@ -1579,9 +1587,9 @@
       "Arm1DmgType": {
         "ori": "Physique",
         "fr": {
-          "text": "",
+          "text": "Physique",
           "history": [],
-          "valid": false
+          "valid": true
         },
         "es": {
           "text": "",
@@ -1597,9 +1605,9 @@
       "Arm1Desc": {
         "ori": "Melée | ATK: +2| Phys",
         "fr": {
-          "text": "",
+          "text": "Mélée | ATK : +2| Phys",
           "history": [],
-          "valid": false
+          "valid": true
         },
         "es": {
           "text": "",
@@ -1615,7 +1623,7 @@
       "Arm2Nom": {
         "ori": "Fist",
         "fr": {
-          "text": "",
+          "text": "Poing",
           "history": [],
           "valid": false
         },
@@ -1633,7 +1641,7 @@
       "Arm2Portee": {
         "ori": "melee",
         "fr": {
-          "text": "",
+          "text": "Mélée",
           "history": [],
           "valid": false
         },
@@ -1651,7 +1659,7 @@
       "Arm2DmgType": {
         "ori": "physical",
         "fr": {
-          "text": "",
+          "text": "physique",
           "history": [],
           "valid": false
         },
@@ -1669,7 +1677,7 @@
       "Arm2Dsc": {
         "ori": "Range | 1H | Trait",
         "fr": {
-          "text": "",
+          "text": "Plage | 1H | Caractéristique",
           "history": [],
           "valid": false
         },
@@ -1725,7 +1733,7 @@
       "description": {
         "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A leather-clad warrior bearing a whip and massive bow.</p><h4>MOTIVES &amp; TACTICS</h4><p>Command, make a living, maneuver, pin down, protect companion animals</p><hr /><h1>EXPERIENCE</h1><p>Animal Handling +3</p><hr /><h1>FEATURES</h1><ul><li>Two as One - Passive: When the Beastmaster is spotlighted, you can also spotlight a Tier 1 animal adversary currently under their control.</li><li>Pinning Strike - Action: Make a standard attack against a target. On a success, you can mark a Stress to pin them to a nearby surface. The pinned target is Restrained until they break free with a successful Finesse or Strength Roll.</li><li>Deadly Companion - Action: Twice per scene, summon a Bear, Dire Wolf, or similar Tier 1 animal adversary under the Beastmaster’s control. The adversary appears at Close range and is immediately spotlighted.</li></ul>",
         "fr": {
-          "text": "",
+          "text": "<h1>Détails</h1> <h4>DESCRIPTION</h4> <p> Un guerrier revêtu de cuir portant une fouette et un arc imposant. </p> <h4>MOTIVATIONS & TACTIQUES</h4> <p> Commandement, subsistance, manœuvres, immobilisation, protection des animaux compagnons </p> <hr /> <h1>EXPÉRIENCE</h1> <p> Maîtrise des animaux +3 </p> <hr /> <h1>CARACTÉRISTIQUES</h1> <ul> <li>Deux en un - Passif : Lorsque le Maître des Bêtes est mis en lumière, vous pouvez également mettre en lumière un adversaire animal de niveau 1 actuellement sous son contrôle. </li> <li>Attaque d'immobilisation - Action : Effectuez une attaque standard contre une cible. En cas de réussite, vous pouvez imposer un point de Stress pour l'immobiliser sur une surface proche. La cible immobilisée est Restreinte jusqu'à ce qu'elle se libère avec une réussite au lancer de Finesse ou de Force. </li> <li>Compagnon Mortel - Action : Deux fois par scène, invoquez un Ours, un Loup de la Dire ou un animal compagnon de niveau 1 similaire sous le contrôle du Maître des Bêtes. L'adversaire apparaît à distance de Proximité et est immédiatement mis en lumière. </li> </ul>",
           "history": [],
           "valid": false
         },
@@ -1743,7 +1751,7 @@
       "Arm1Nom": {
         "ori": "Longbow",
         "fr": {
-          "text": "",
+          "text": "Arbalète longue",
           "history": [],
           "valid": false
         },
@@ -1815,7 +1823,7 @@
       "Arm2Nom": {
         "ori": "Fist",
         "fr": {
-          "text": "",
+          "text": "Poing",
           "history": [],
           "valid": false
         },
@@ -1925,7 +1933,7 @@
       "description": {
         "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>An armored squire or experienced commoner looking to advance.</p><h4>MOTIVES &amp; TACTICS</h4><p>Gain glory, keep order, make alliances</p><hr /><h1>EXPERIENCE</h1><p></p><hr /><h1>FEATURES</h1><ul><li>Reinforce - Action: Mark a Stress to move into Melee range of an ally and make a standard attack against a target within Very Close range. On a success, deal 2d10+2 physical damage and the ally can clear a Stress.</li><li>Vassal’s Loyalty - Reaction: When the Soldier is within Very Close range of a knight or other noble who would take damage, you can mark a Stress to move into Melee range of them and take the damage instead.</li></ul>",
         "fr": {
-          "text": "",
+          "text": "<h1>Détails</h1><h4>DESCRIPTION</h4><p>Un écuyer blindé ou un communer expérimenté qui cherche à progresser.</p><h4>MOTIVATIONS & TACTIQUES</h4><p>Gagner la gloire, maintenir l'ordre, forger des alliances</p><hr /><h1>Expérience</h1><p></p><hr  /><h1>Caractéristiques</h1><ul><li>Reinforce - Action : Marquer un Stress pour se déplacer dans la portée du combat d'un allié et effectuer une attaque standard contre une cible à très courte distance. En cas de succès, infliger 2d10+2 dégâts physiques et l'allié peut éliminer un Stress.</li><li>Vassal's Loyalty - Réaction : Lorsque le Soldat est à très courte distance d'un chevalier ou d'une autre personne noble qui pourrait subir des dégâts, vous pouvez marquer un Stress pour vous déplacer dans sa portée et prendre les dégâts à la place.</li></ul>",
           "history": [],
           "valid": false
         },
@@ -1943,7 +1951,7 @@
       "Arm1Nom": {
         "ori": "Spear",
         "fr": {
-          "text": "",
+          "text": "L'épée",
           "history": [],
           "valid": false
         },
@@ -2015,7 +2023,7 @@
       "Arm2Nom": {
         "ori": "Fist",
         "fr": {
-          "text": "",
+          "text": "Poing",
           "history": [],
           "valid": false
         },
@@ -2125,7 +2133,7 @@
       "description": {
         "ori": "<h1>Details</h1><h4>DESCRIPTION</h4><p>A living flame the size of a large bonfire.</p><h4>MOTIVES &amp; TACTICS</h4><p>Encircle enemies, grow in size, intimidate, start fires</p><hr /><h1>EXPERIENCE</h1><p></p><hr /><h1>FEATURES</h1><ul><li>Relentless (2) - Passive: The Elemental can be spotlighted up to two times per GM turn. Spend Fear as usual to spotlight them.</li><li>Scorched Earth - Action: Mark a Stress to choose a point within Far range. The ground within Very Close range of that point immediately bursts into flames. All creatures within this area must make an Agility Reaction Roll. Targets who fail take 2d8 magic damage from the flames. Targets who succeed take half damage.</li><li>Explosion - Action: Spend a Fear to erupt in a fiery explosion. Make an attack against all targets within Close range. Targets the Elemental succeeds against take 1d8 magic damage and are knocked back to Far range.</li><li>Consume Kindling - Reaction: Three times per scene, when the Elemental moves onto objects that are highly flammable, consume them to clear a HP or a Stress.</li><li>Momentum - Reaction: When the Elemental makes a successful attack against a PC, you gain a Fear.</li></ul>",
         "fr": {
-          "text": "",
+          "text": "<h1>Détails</h1> <h4>DESCRIPTION</h4> <p>Une flamme vivante de la taille d'un grand feu de joie.</p> <h4>MOTIVES & TACTIQUES</h4> <p>Encercle les ennemis, grossissez, intimidez, démarrez des feux</p> <hr /> <h1>expérience</h1> <p></p> <hr /> <h1>Caractéristiques</h1> <ul> <li>Sans relâche (2) - Passif : l'élémentaire peut être mis en lumière deux fois par tour de Maître du jeu. Dépensez la peur comme d'habitude pour les mettre en lumière.</li> <li>Sollicité par le sol - Action : Marquez un stress pour choisir un point à l'intérieur de la portée Far. Le sol à très proche range du point choisi s'enflamme immédiatement. Toutes les créatures dans cette zone doivent effectuer un jet de réaction Agilité. Les cibles qui échouent subissent 2d8 dégâts magiques provenant des flammes. Les cibles qui réussissent subissent la moitié des dégâts.</li> <li>Explosion - Action : Dépensez une peur pour éclater en une explosion de feu. Effectuez un jet d'attaque contre toutes les cibles à Close range. Les cibles qui réussissent l'attaque subissent 1d8 dégâts magiques et sont repoussées à Far range.</li> <li>Consommer la brindille - Réaction : Trois fois par scène, lorsque l'élémentaire se déplace sur des objets hautement inflammables, consommez-les pour soigner un point de vie ou de stress.</li> <li>Momentum - Réaction : Lorsque l'élémentaire inflige avec succès une attaque à un PC, vous gagnez une peur.</li> </ul>",
           "history": [],
           "valid": false
         },
@@ -2143,7 +2151,7 @@
       "Arm1Nom": {
         "ori": "Elemental Blast",
         "fr": {
-          "text": "",
+          "text": "Explosion Élémentaire",
           "history": [],
           "valid": false
         },
@@ -2215,7 +2223,7 @@
       "Arm2Nom": {
         "ori": "Fist",
         "fr": {
-          "text": "",
+          "text": "Poing",
           "history": [],
           "valid": false
         },

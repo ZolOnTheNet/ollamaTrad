@@ -32,6 +32,7 @@ from core.got_json_manager import GotJsonManager
 from core.ai_client import AIClient
 from utils.file_loader import load_file_intelligently
 from gui.translation_form_v2 import TranslationFormV2
+from gui.batch_translation_form import BatchTranslationForm
 from gui.chat_panel import ChatPanel
 from gui.options_dialog_v3 import OptionsDialogV3 as OptionsDialog
 
@@ -51,6 +52,10 @@ class OllamaFicGUIv2:
 
         # Configuration des traductions
         self.translation_config = self._load_translation_config()
+
+        # Tracker de modifications non sauvegardées
+        self.has_unsaved_changes = False
+        self.last_saved_state = None  # Hash des données pour détecter les changements
 
         # Mode debug pour afficher les prompts complets dans le chat
         self.debug_mode = True  # Mettre à True pour voir les prompts complets
@@ -84,6 +89,13 @@ class OllamaFicGUIv2:
         menubar.add_cascade(label="Fichier", menu=file_menu)
         file_menu.add_command(label="Ouvrir JSON/GOT...", command=self.open_file_dialog, accelerator="Ctrl+O")
         file_menu.add_command(label="Sauvegarder", command=self.save_file, accelerator="Ctrl+S")
+        file_menu.add_separator()
+
+        # Menu Export (sera créé dynamiquement)
+        self.export_menu = tk.Menu(file_menu, tearoff=0)
+        file_menu.add_cascade(label="📤 Exporter vers JSON...", menu=self.export_menu)
+        self._update_export_menu()  # Initialiser le menu export
+
         file_menu.add_separator()
         file_menu.add_command(label="⚙️ Options...", command=self.open_options_dialog)
         file_menu.add_separator()
@@ -203,16 +215,33 @@ class OllamaFicGUIv2:
         ttk.Label(title_frame, text="(Le bouton ↶ annule chaque langue individuellement)",
                  font=("Arial", 8), foreground="gray").pack(side="right", padx=5)
 
-        # Formulaire
+        # Conteneur pour les formulaires (on switch entre feuille et branche)
+        self.form_container = ttk.Frame(form_frame)
+        self.form_container.pack(fill="both", expand=True)
+
+        # Formulaire de traduction (feuilles)
         self.translation_form = TranslationFormV2(
-            form_frame,
+            self.form_container,
             self.got_manager,
             on_magic_click=self._on_magic_click,
+            on_deepl_click=self._on_deepl_click,
             on_validate=self._on_validate,
             on_rollback=self._on_rollback,
             on_manual_edit=self._on_manual_edit
         )
-        self.translation_form.pack(fill="both", expand=True)
+
+        # Formulaire de traduction par lot (branches)
+        self.batch_form = BatchTranslationForm(
+            self.form_container,
+            visible_languages=self.translation_config.get("visible_languages", []),
+            on_batch_translate=self._on_batch_translate,
+            on_batch_deepl_translate=self._on_batch_deepl_translate,
+            got_manager=self.got_manager,
+            translation_config=self.translation_config
+        )
+
+        # Par défaut, rien n'est affiché
+        # Les formulaires seront affichés selon la sélection
 
     def _create_statusbar(self):
         """Crée la barre de statut."""
@@ -222,8 +251,19 @@ class OllamaFicGUIv2:
         self.status_label = ttk.Label(statusbar, text="Prêt", relief="sunken", anchor="w")
         self.status_label.pack(side="left", fill="x", expand=True)
 
+        # Label pour le compteur DeepL (spécifique)
+        self.deepl_count_label = ttk.Label(statusbar, text="", relief="sunken", anchor="e")
+        self.deepl_count_label.pack(side="right", padx=(5, 0))
+
+        # Label pour le compteur de caractères (autres APIs payantes)
+        self.char_count_label = ttk.Label(statusbar, text="📊 0 car.", relief="sunken", anchor="e")
+        self.char_count_label.pack(side="right", padx=(5, 0))
+
         self.file_label = ttk.Label(statusbar, text="Aucun fichier", relief="sunken", anchor="e")
         self.file_label.pack(side="right")
+
+        # Mettre à jour le compteur toutes les 2 secondes
+        self._update_character_count()
 
     def _load_translation_config(self) -> Dict:
         """Charge la configuration des traductions"""
@@ -241,6 +281,22 @@ class OllamaFicGUIv2:
             "visible_languages": ["fr", "en", "es"],
             "prompts": {}
         }
+
+    def _mark_as_modified(self):
+        """Marque le fichier comme ayant des modifications non sauvegardées"""
+        self.has_unsaved_changes = True
+        # Mettre à jour le titre de la fenêtre pour indiquer les modifications
+        if self.current_file_path:
+            filename = Path(self.current_file_path).name
+            self.root.title(f"OllamaFic v2.0 - {filename} *")
+
+    def _mark_as_saved(self):
+        """Marque le fichier comme sauvegardé"""
+        self.has_unsaved_changes = False
+        # Mettre à jour le titre de la fenêtre
+        if self.current_file_path:
+            filename = Path(self.current_file_path).name
+            self.root.title(f"OllamaFic v2.0 - {filename}")
 
     def open_options_dialog(self):
         """Ouvre la fenêtre d'options"""
@@ -269,6 +325,15 @@ class OllamaFicGUIv2:
             # Mettre à jour les couleurs de l'arbre
             self._update_all_parent_colors()
 
+        # Mettre à jour la configuration du batch_form
+        self.batch_form.set_visible_languages(self.translation_config.get("visible_languages", []))
+        self.batch_form.set_translation_config(self.translation_config)
+        if self.got_manager:
+            self.batch_form.set_got_manager(self.got_manager)
+
+        # Mettre à jour le compteur DeepL avec la nouvelle limite
+        self._update_character_count()
+
         self.status_label.config(text="✓ Configuration mise à jour")
 
     def open_file_dialog(self):
@@ -276,7 +341,7 @@ class OllamaFicGUIv2:
         filename = filedialog.askopenfilename(
             title="Ouvrir un fichier JSON ou .got.json",
             filetypes=[
-                ("Tous fichiers JSON", "*.json;*.got.json"),
+                ("Tous fichiers JSON", "*.json *.got.json"),
                 ("Fichiers .got.json", "*.got.json"),
                 ("Fichiers JSON", "*.json"),
                 ("Tous les fichiers", "*.*")
@@ -308,6 +373,10 @@ class OllamaFicGUIv2:
             # Mettre à jour le formulaire
             self.translation_form.set_got_manager(self.got_manager)
 
+            # Mettre à jour le batch_form
+            self.batch_form.set_got_manager(self.got_manager)
+            self.batch_form.set_translation_config(self.translation_config)
+
             # Charger l'arbre
             self._populate_tree()
 
@@ -316,10 +385,16 @@ class OllamaFicGUIv2:
             self.file_label.config(text=filename)
             self.status_label.config(text=f"✓ Fichier chargé: {filename}")
 
+            # Marquer comme non modifié (fichier vient d'être chargé)
+            self._mark_as_saved()
+
             # Afficher les stats dans le chat
             stats = self.got_manager.get_translation_stats()
             self.chat_panel.add_message("system",
                 f"Fichier chargé: {stats['total_entries']} entrées traduisibles")
+
+            # Mettre à jour le menu Export
+            self._update_export_menu()
 
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible de charger le fichier:\n{e}")
@@ -439,11 +514,101 @@ class OllamaFicGUIv2:
             # Mettre à jour l'affichage du chemin actuel
             self.current_path_label.config(text=path)
 
-            # Mettre à jour le formulaire
-            self.translation_form.load_entry(path)
+            # Vérifier si c'est une feuille traduisible ou une branche
+            is_leaf = self.got_manager.is_translatable_leaf(path)
+
+            if is_leaf:
+                # C'est une feuille -> Afficher le formulaire de traduction
+                self.batch_form.pack_forget()
+                self.translation_form.pack(fill="both", expand=True)
+                self.translation_form.load_entry(path)
+            else:
+                # C'est une branche -> Afficher le formulaire de traduction par lot
+                self.translation_form.pack_forget()
+                leaves = self.got_manager.get_translatable_leaves_in_subtree(path)
+                self.batch_form.pack(fill="both", expand=True)
+                self.batch_form.load_branch(path, leaves)
 
             # Mettre à jour le contexte du chat
             self.chat_panel.set_context(path)
+
+    def _translate_text(self, text: str, target_lang: str, source_lang: str = "auto") -> Optional[str]:
+        """
+        Traduit un texte avec gestion du timeout.
+
+        Args:
+            text: Texte à traduire
+            target_lang: Code langue cible (ex: "fr")
+            source_lang: Code langue source (ex: "en" ou "auto")
+
+        Returns:
+            Texte traduit ou None en cas d'erreur/timeout
+        """
+        if not text or not text.strip():
+            return None
+
+        # Calculer un timeout dynamique basé sur la taille du texte
+        text_length = len(text)
+        estimated_time = text_length / 5  # secondes (vitesse très conservatrice: 5 chars/sec)
+        timeout = max(120, int(estimated_time * 4))  # minimum 120s, marge x4
+
+        # Construire le prompt
+        prompts = self.translation_config.get("prompts", {})
+        has_html = '<' in text and '>' in text
+
+        # Construire la phrase de langue source
+        source_lang_phrase = ""
+        if source_lang and source_lang != "auto":
+            lang_names = {
+                "en": "anglais", "fr": "français", "es": "espagnol", "de": "allemand",
+                "it": "italien", "pt": "portugais", "ru": "russe", "ja": "japonais",
+                "zh": "chinois", "ko": "coréen", "ar": "arabe"
+            }
+            source_lang_name = lang_names.get(source_lang, source_lang)
+            source_lang_phrase = f" depuis le {source_lang_name}"
+
+        # Obtenir le nom complet de la langue
+        known_languages = self.translation_config.get("known_languages", {})
+        lang_name = known_languages.get(target_lang, target_lang.upper())
+
+        if has_html:
+            prompt_template = prompts.get("translate_html",
+                'Traduis le texte suivant{source_lang} en {lang}.\nIMPORTANT: Préserve TOUTES les balises HTML.\n\n{text}')
+            prompt = prompt_template.format(text=text, lang=lang_name, source_lang=source_lang_phrase)
+        else:
+            prompt_template = prompts.get("translate",
+                'Traduis "{text}"{source_lang} en {lang}. Réponds uniquement avec la traduction, sans explication.')
+            prompt = prompt_template.format(text=text, lang=lang_name, source_lang=source_lang_phrase)
+
+        try:
+            # Effacer l'historique pour éviter les réponses précédentes
+            self.ai_client.clear_conversation()
+
+            # Créer une nouvelle boucle d'événements pour ce thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            # Exécuter l'appel asynchrone avec timeout dynamique
+            raw_result = loop.run_until_complete(self.ai_client.chat(prompt, timeout=timeout))
+
+            # Fermer la boucle
+            loop.close()
+
+            # Nettoyer le résultat
+            if isinstance(raw_result, dict):
+                result = raw_result.get("message", {}).get("content", "")
+            else:
+                result = str(raw_result)
+
+            result = result.strip().strip('"').strip("'")
+            return result if result else None
+
+        except asyncio.TimeoutError:
+            print(f"⏱️ Timeout lors de la traduction ({timeout}s dépassé)")
+            return None
+        except Exception as e:
+            print(f"❌ Erreur lors de la traduction: {e}")
+            return None
 
     def _on_magic_click(self, lang: str, action: str, selection_data: dict = None, source_lang: str = "auto"):
         """
@@ -659,6 +824,139 @@ class OllamaFicGUIv2:
         thread = threading.Thread(target=run_translation, daemon=True)
         thread.start()
 
+    def _on_deepl_click(self, lang: str, action: str, selection_data: dict = None, source_lang: str = "auto"):
+        """
+        Gère le clic sur le bouton DeepL.
+
+        Args:
+            lang: Code langue cible
+            action: "translate", "improve", "translate_selection" ou "improve_selection"
+            selection_data: Dict avec {"start": index, "end": index, "text": str} ou None
+            source_lang: Langue d'origine ("auto" pour détection automatique)
+        """
+        # Vérifier si DeepL est activé dans la configuration
+        deepl_config = self.translation_config.get("ai_config", {}).get("deepl", {})
+        deepl_enabled = deepl_config.get("enabled", False)
+
+        if not deepl_enabled:
+            messagebox.showwarning("DeepL désactivé",
+                                 "DeepL n'est pas activé. Veuillez l'activer dans Options > Configuration IA.")
+            return
+
+        api_key = deepl_config.get("api_key", "")
+        if not api_key:
+            messagebox.showwarning("Clé API manquante",
+                                 "Clé API DeepL non configurée. Veuillez la configurer dans Options > Configuration IA.")
+            return
+
+        # Utiliser current_entry_state systématiquement
+        if not self.current_entry_state["path"] or not self.current_entry_state["entry"]:
+            return
+
+        # IMPORTANT: Capturer les variables IMMÉDIATEMENT
+        captured_path = self.current_entry_state["path"]
+        captured_entry = self.current_entry_state["entry"]
+        captured_lang = lang
+        captured_action = action
+        captured_selection = selection_data
+        captured_source_lang = source_lang
+
+        original = captured_entry["ori"]
+        current_text = captured_entry[captured_lang]["text"]
+
+        # Gérer les actions de sélection
+        is_selection = captured_action in ("translate_selection", "improve_selection")
+        text_to_translate = captured_selection["text"] if is_selection and captured_selection else None
+
+        # Pour DeepL, on ne fait que de la traduction (pas d'amélioration comme avec les LLM)
+        # Si l'action est "improve", on re-traduit simplement le texte actuel
+        if is_selection and text_to_translate:
+            source_text = text_to_translate
+        elif captured_action in ("translate", "translate_selection"):
+            source_text = text_to_translate if is_selection else original
+        else:  # improve ou improve_selection
+            source_text = text_to_translate if is_selection else current_text
+
+        # Timeout pour DeepL (plus court car c'est une API rapide)
+        timeout = 30
+
+        # Logger le début de la traduction
+        self.chat_panel.add_message("system",
+            f"DeepL {captured_lang.upper()}: Traduction → \"{source_text[:100]}{'...' if len(source_text) > 100 else ''}\"")
+
+        # Lancer l'appel DeepL dans un thread séparé
+        self.status_label.config(text=f"🌐 Traduction DeepL {captured_lang} en cours...")
+        self.root.update()
+
+        def run_deepl_translation():
+            """Fonction exécutée dans un thread séparé"""
+            try:
+                # Utiliser l'instance globale de DeepL pour le comptage
+                # Si disponible, sinon créer une instance locale
+                if "deepl" in self.ai_client.providers:
+                    deepl_provider = self.ai_client.providers["deepl"]
+                else:
+                    # Fallback : créer une instance locale (ne comptera pas dans le total)
+                    from core.ai_client import DeepLProvider
+                    deepl_provider = DeepLProvider({
+                        "api_key": api_key,
+                        "is_pro": deepl_config.get("is_pro", False),
+                        "timeout": timeout
+                    })
+
+                # Mapper le code langue pour DeepL
+                # DeepL utilise des codes en majuscules avec tiret (ex: EN-US, FR, ES)
+                deepl_lang_map = {
+                    "en": "EN-US",
+                    "fr": "FR",
+                    "es": "ES",
+                    "de": "DE",
+                    "it": "IT",
+                    "pt": "PT-BR",
+                    "ru": "RU",
+                    "ja": "JA",
+                    "zh": "ZH",
+                    "ko": "KO",
+                    "ar": "AR"
+                }
+                target_lang_deepl = deepl_lang_map.get(captured_lang, captured_lang.upper())
+
+                # Mapper la langue source si spécifiée
+                source_lang_deepl = None
+                if captured_source_lang and captured_source_lang != "auto":
+                    source_lang_deepl = deepl_lang_map.get(captured_source_lang, captured_source_lang.upper())
+
+                # Créer une boucle d'événements pour ce thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # Appeler DeepL avec timeout
+                result = loop.run_until_complete(
+                    deepl_provider.translate(source_text, target_lang_deepl, source_lang_deepl, timeout)
+                )
+
+                # Fermer la boucle
+                loop.close()
+
+                # Nettoyer le résultat
+                result = result.strip() if result else ""
+
+                if not result:
+                    raise Exception("Traduction vide reçue de DeepL")
+
+                # Mettre à jour l'UI dans le thread principal
+                self.root.after(0, lambda p=captured_path, l=captured_lang, kept=result, a=captured_action,
+                              s=captured_selection, sent=source_text, ret=result:
+                              self._on_translation_success(p, l, kept, a, s, sent, ret, f"DeepL: {source_text} -> {target_lang_deepl}"))
+
+            except Exception as ex:
+                error_msg = str(ex)
+                self.root.after(0, lambda msg=error_msg: self._on_translation_error(msg))
+
+        # Lancer le thread
+        thread = threading.Thread(target=run_deepl_translation, daemon=True)
+        thread.start()
+
     def _on_translation_success(self, path: str, lang: str, kept_text: str, action: str,
                                selection_data: dict = None, sent_text: str = None,
                                returned_text: str = None, full_prompt: str = None):
@@ -700,14 +998,17 @@ class OllamaFicGUIv2:
                     # Mettre à jour dans got_manager (gère automatiquement l'historique)
                     self.got_manager.update_translation(path, lang, new_full_text)
                     updated_entry = self.got_manager._get_entry_by_path(path)
+                    self._mark_as_modified()
                 else:
                     # Fallback : mettre à jour le texte complet
                     self.got_manager.update_translation(path, lang, kept_text)
                     updated_entry = self.got_manager._get_entry_by_path(path)
+                    self._mark_as_modified()
             else:
                 # Traduction complète : comportement normal
                 self.got_manager.update_translation(path, lang, kept_text)
                 updated_entry = self.got_manager._get_entry_by_path(path)
+                self._mark_as_modified()
 
             # Mettre à jour les couleurs de l'arbre
             self._update_tree_colors(path)
@@ -760,6 +1061,7 @@ class OllamaFicGUIv2:
 
         path = self.current_entry_state["path"]
         self.got_manager.validate_translation(path, lang, valid)
+        self._mark_as_modified()
 
         # Mettre à jour current_entry_state
         self.current_entry_state["entry"] = self.got_manager._get_entry_by_path(path)
@@ -846,9 +1148,269 @@ class OllamaFicGUIv2:
 
         # Mettre à jour avec historique
         self.got_manager.update_translation(path, lang, new_text)
+        self._mark_as_modified()
 
         # Mettre à jour current_entry_state
         self.current_entry_state["entry"] = self.got_manager._get_entry_by_path(path)
+
+    def _on_batch_deepl_translate(self, lang: str, selected_paths: list):
+        """
+        Gère la traduction DeepL par lot d'un sous-arbre.
+
+        Args:
+            lang: Code langue cible
+            selected_paths: Liste des chemins sélectionnés
+        """
+        if not selected_paths:
+            messagebox.showinfo("Aucune feuille sélectionnée",
+                              "Veuillez sélectionner au moins une feuille à traduire.")
+            return
+
+        # Vérifier si DeepL est configuré
+        deepl_config = self.translation_config.get("ai_config", {}).get("deepl", {})
+        deepl_enabled = deepl_config.get("enabled", False)
+
+        if not deepl_enabled:
+            messagebox.showwarning("DeepL désactivé",
+                                 "DeepL n'est pas activé. Veuillez l'activer dans Options > Configuration IA.")
+            return
+
+        api_key = deepl_config.get("api_key", "")
+        if not api_key:
+            messagebox.showwarning("Clé API manquante",
+                                 "Clé API DeepL non configurée. Veuillez la configurer dans Options > Configuration IA.")
+            return
+
+        # Démarrer le traitement
+        self.batch_form.start_processing(len(selected_paths))
+
+        # Sauvegarder le chemin de la branche pour la resélectionner après
+        branch_path = self.current_entry_state.get("path", "")
+
+        # Lancer le traitement dans un thread pour ne pas bloquer l'interface
+        import threading
+
+        def batch_process_deepl():
+            """Traite toutes les feuilles une par une avec DeepL."""
+            for i, leaf_path in enumerate(selected_paths):
+                # Vérifier si l'utilisateur a demandé l'arrêt
+                if self.batch_form.is_stopped():
+                    self.root.after(0, lambda: self.batch_form.finish_processing(success=False))
+                    return
+
+                # Mettre à jour la progression (dans le thread principal)
+                self.root.after(0, lambda curr=i, tot=len(selected_paths), p=leaf_path:
+                                self.batch_form.update_progress(curr, tot, p))
+
+                try:
+                    # Récupérer l'entrée
+                    entry = self.got_manager._get_entry_by_path(leaf_path)
+
+                    # Vérifier si c'est bien une entrée traduisible
+                    if not isinstance(entry, dict) or "ori" not in entry:
+                        continue
+
+                    # Vérifier si la traduction existe et est non vide, OU si elle est validée
+                    skip_translation = False
+                    if lang in entry:
+                        lang_data = entry[lang]
+                        if isinstance(lang_data, dict):
+                            translation_text = lang_data.get("text", "")
+                            is_validated = lang_data.get("valid", False)
+
+                            # Sauter si : (1) texte validé (ne JAMAIS retraduire), OU (2) texte non vide
+                            # IMPORTANT : Les traductions validées ne doivent JAMAIS être retraduits
+                            if is_validated:
+                                # Traduction validée : ne jamais retraduire
+                                skip_translation = True
+                            elif translation_text and translation_text.strip():
+                                # Traduction non validée mais présente : passer pour l'instant
+                                # (ne traduire que les champs vides)
+                                skip_translation = True
+                        elif isinstance(lang_data, str):
+                            # Ancien format : traduction directe en string
+                            if lang_data.strip():
+                                skip_translation = True
+
+                    if skip_translation:
+                        continue
+
+                    # Pas de traduction -> Traduire avec DeepL
+                    original = entry.get("ori", "")
+                    if not original or not original.strip():
+                        continue  # Pas d'original, rien à traduire
+
+                    # Traduire avec DeepL en utilisant l'instance globale pour le comptage
+                    # Utiliser self.ai_client.providers["deepl"] si disponible, sinon créer une instance locale
+                    if "deepl" in self.ai_client.providers:
+                        deepl_provider = self.ai_client.providers["deepl"]
+                    else:
+                        # Fallback : créer une instance locale (ne comptera pas dans le total)
+                        from core.ai_client import DeepLProvider
+                        deepl_provider = DeepLProvider({
+                            "api_key": api_key,
+                            "is_pro": deepl_config.get("is_pro", False),
+                            "timeout": 30
+                        })
+
+                    # Mapper le code langue pour DeepL
+                    deepl_lang_map = {
+                        "en": "EN-US",
+                        "fr": "FR",
+                        "es": "ES",
+                        "de": "DE",
+                        "it": "IT",
+                        "pt": "PT-BR",
+                        "ru": "RU",
+                        "ja": "JA",
+                        "zh": "ZH",
+                        "ko": "KO",
+                        "ar": "AR"
+                    }
+                    target_lang_deepl = deepl_lang_map.get(lang, lang.upper())
+
+                    # Créer une boucle d'événements pour ce thread
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
+                    # Appeler DeepL avec timeout
+                    translated_text = loop.run_until_complete(
+                        deepl_provider.translate(original, target_lang_deepl, "auto", 30)
+                    )
+
+                    # Fermer la boucle
+                    loop.close()
+
+                    # Mettre à jour la traduction si on a un résultat
+                    if translated_text:
+                        self.got_manager.update_translation(leaf_path, lang, translated_text)
+                        # Marquer comme modifié (dans le thread principal)
+                        self.root.after(0, self._mark_as_modified)
+                    else:
+                        # Erreur - on laisse vide
+                        print(f"⚠️ Pas de traduction pour {leaf_path}")
+
+                except Exception as e:
+                    import traceback
+                    print(f"Erreur lors de la traduction de {leaf_path}:")
+                    print(f"  Type: {type(e).__name__}")
+                    print(f"  Message: {e}")
+                    print(f"  Traceback: {traceback.format_exc()}")
+                    # Continuer avec la feuille suivante
+
+            # Traitement terminé
+            self.root.after(0, lambda: self.batch_form.finish_processing(success=True))
+            self.root.after(0, self._populate_tree)
+            # Resélectionner la branche après le rafraîchissement
+            if branch_path:
+                self.root.after(100, lambda: self._select_path_in_tree(branch_path))
+
+        # Lancer le thread
+        thread = threading.Thread(target=batch_process_deepl, daemon=True)
+        thread.start()
+
+    def _on_batch_translate(self, lang: str, selected_paths: list):
+        """
+        Gère la traduction par lot d'un sous-arbre.
+
+        Args:
+            lang: Code langue cible
+            selected_paths: Liste des chemins sélectionnés
+        """
+        if not selected_paths:
+            messagebox.showinfo("Aucune feuille sélectionnée",
+                              "Veuillez sélectionner au moins une feuille à traduire.")
+            return
+
+        # Démarrer le traitement
+        self.batch_form.start_processing(len(selected_paths))
+
+        # Sauvegarder le chemin de la branche pour la resélectionner après
+        branch_path = self.current_entry_state.get("path", "")
+
+        # Lancer le traitement dans un thread pour ne pas bloquer l'interface
+        import threading
+
+        def batch_process():
+            """Traite toutes les feuilles une par une."""
+            for i, leaf_path in enumerate(selected_paths):
+                # Vérifier si l'utilisateur a demandé l'arrêt
+                if self.batch_form.is_stopped():
+                    self.root.after(0, lambda: self.batch_form.finish_processing(success=False))
+                    return
+
+                # Mettre à jour la progression (dans le thread principal)
+                self.root.after(0, lambda curr=i, tot=len(selected_paths), p=leaf_path:
+                                self.batch_form.update_progress(curr, tot, p))
+
+                try:
+                    # Récupérer l'entrée
+                    entry = self.got_manager._get_entry_by_path(leaf_path)
+
+                    # Vérifier si c'est bien une entrée traduisible
+                    if not isinstance(entry, dict) or "ori" not in entry:
+                        continue
+
+                    # Vérifier si la traduction existe et est non vide, OU si elle est validée
+                    skip_translation = False
+                    if lang in entry:
+                        lang_data = entry[lang]
+                        if isinstance(lang_data, dict):
+                            translation_text = lang_data.get("text", "")
+                            is_validated = lang_data.get("valid", False)
+
+                            # Sauter si : (1) texte validé (ne JAMAIS retraduire), OU (2) texte non vide
+                            # IMPORTANT : Les traductions validées ne doivent JAMAIS être retraduits
+                            if is_validated:
+                                # Traduction validée : ne jamais retraduire
+                                skip_translation = True
+                            elif translation_text and translation_text.strip():
+                                # Traduction non validée mais présente : passer pour l'instant
+                                # (ne traduire que les champs vides)
+                                skip_translation = True
+                        elif isinstance(lang_data, str):
+                            # Ancien format : traduction directe en string
+                            if lang_data.strip():
+                                skip_translation = True
+
+                    if skip_translation:
+                        continue
+
+                    # Pas de traduction -> Traduire
+                    original = entry.get("ori", "")
+                    if not original or not original.strip():
+                        continue  # Pas d'original, rien à traduire
+
+                    # Utiliser la méthode factorisée qui gère timeout et tout
+                    translated_text = self._translate_text(original, lang, source_lang="auto")
+
+                    # Mettre à jour la traduction si on a un résultat
+                    if translated_text:
+                        self.got_manager.update_translation(leaf_path, lang, translated_text)
+                        # Marquer comme modifié (dans le thread principal)
+                        self.root.after(0, self._mark_as_modified)
+                    else:
+                        # Timeout ou erreur - on laisse vide comme demandé
+                        print(f"⚠️ Pas de traduction pour {leaf_path} (timeout ou erreur)")
+
+                except Exception as e:
+                    import traceback
+                    print(f"Erreur lors de la traduction de {leaf_path}:")
+                    print(f"  Type: {type(e).__name__}")
+                    print(f"  Message: {e}")
+                    print(f"  Traceback: {traceback.format_exc()}")
+                    # Continuer avec la feuille suivante
+
+            # Traitement terminé
+            self.root.after(0, lambda: self.batch_form.finish_processing(success=True))
+            self.root.after(0, self._populate_tree)
+            # Resélectionner la branche après le rafraîchissement
+            if branch_path:
+                self.root.after(100, lambda: self._select_path_in_tree(branch_path))
+
+        # Lancer le thread
+        thread = threading.Thread(target=batch_process, daemon=True)
+        thread.start()
 
     def _on_user_chat_message(self, message: str):
         """
@@ -884,22 +1446,18 @@ class OllamaFicGUIv2:
             # Pas de "/" : traiter comme "/ia <message>"
             self._handle_ia_command(message)
 
-    def _handle_cd_command(self, path: str):
+    def _select_path_in_tree(self, path: str) -> bool:
         """
-        Gère la commande /cd pour naviguer dans l'arbre.
+        Sélectionne un chemin dans l'arbre.
 
         Args:
-            path: Chemin de destination (ex: "app/title" ou "/app/title")
-        """
-        if not path:
-            # Afficher le chemin actuel
-            current = self.current_entry_state["path"] or "(aucun)"
-            self.chat_panel.add_message("system", f"📍 Chemin actuel: {current}")
-            return
+            path: Chemin à sélectionner (ex: "app/title")
 
-        if not self.got_manager:
-            self.chat_panel.add_error("Aucun fichier chargé")
-            return
+        Returns:
+            True si la sélection a réussi, False sinon
+        """
+        if not path or not self.got_manager:
+            return False
 
         # Nettoyer le chemin (enlever le "/" initial si présent)
         path = path.strip()
@@ -920,15 +1478,37 @@ class OllamaFicGUIv2:
 
                 # La sélection déclenchera automatiquement _on_tree_select
                 # qui mettra à jour le formulaire et le contexte
-
-                self.chat_panel.add_message("system", f"✓ Navigué vers: {path}")
+                return True
             else:
-                self.chat_panel.add_error(f"Item d'arbre non trouvé pour: {path}")
+                return False
 
-        except KeyError:
-            self.chat_panel.add_error(f"Chemin non trouvé: {path}")
-        except Exception as e:
-            self.chat_panel.add_error(f"Erreur de navigation: {str(e)}")
+        except (KeyError, ValueError):
+            return False
+
+    def _handle_cd_command(self, path: str):
+        """
+        Gère la commande /cd pour naviguer dans l'arbre.
+
+        Args:
+            path: Chemin de destination (ex: "app/title" ou "/app/title")
+        """
+        if not path:
+            # Afficher le chemin actuel
+            current = self.current_entry_state["path"] or "(aucun)"
+            self.chat_panel.add_message("system", f"📍 Chemin actuel: {current}")
+            return
+
+        if not self.got_manager:
+            self.chat_panel.add_error("Aucun fichier chargé")
+            return
+
+        # Utiliser la méthode _select_path_in_tree
+        success = self._select_path_in_tree(path)
+
+        if success:
+            self.chat_panel.add_message("system", f"✓ Navigué vers: {path}")
+        else:
+            self.chat_panel.add_error(f"Chemin invalide ou item non trouvé: {path}")
 
     def _handle_ia_command(self, message: str):
         """
@@ -1243,6 +1823,7 @@ class OllamaFicGUIv2:
 
         try:
             self.got_manager.save_to_file()
+            self._mark_as_saved()
             self.status_label.config(text=f"✓ Fichier sauvegardé: {Path(self.current_file_path).name}")
             self.chat_panel.add_message("system", "Fichier sauvegardé")
         except Exception as e:
@@ -1258,8 +1839,271 @@ class OllamaFicGUIv2:
             "Format: .got.json v2.0\n"
             "© 2025")
 
+    def _update_export_menu(self):
+        """Met à jour le menu Export avec les langues disponibles."""
+        # Vider le menu
+        self.export_menu.delete(0, "end")
+
+        if not self.got_manager:
+            # Aucun fichier chargé
+            self.export_menu.add_command(label="(Aucun fichier chargé)", state="disabled")
+            return
+
+        # Ajouter une entrée pour chaque langue cible
+        for lang in self.got_manager.target_languages:
+            self.export_menu.add_command(
+                label=f"{lang.upper()}",
+                command=lambda l=lang: self._export_with_language(l)
+            )
+
+        # Séparateur
+        self.export_menu.add_separator()
+
+        # Entrée "Autre..."
+        self.export_menu.add_command(
+            label="Autre...",
+            command=lambda: self._export_with_language(None)
+        )
+
+    def _export_with_language(self, language: Optional[str]):
+        """
+        Ouvre le dialogue d'export avec une langue pré-sélectionnée.
+
+        Args:
+            language: Code langue ou None pour "Autre..."
+        """
+        if not self.got_manager or not self.current_file_path:
+            messagebox.showerror("Erreur", "Aucun fichier chargé")
+            return
+
+        # Importer le dialogue d'export
+        from gui.export_dialog import ExportDialog
+
+        # Créer et afficher le dialogue
+        dialog = ExportDialog(
+            parent=self.root,
+            current_file_path=self.current_file_path,
+            target_language=language,
+            available_languages=self.got_manager.target_languages
+        )
+
+        result = dialog.show()
+
+        if result:
+            # Exécuter l'export
+            self._perform_export(
+                output_path=result['output_path'],
+                target_language=result['language'],
+                mode=result['mode']
+            )
+
+    def _perform_export(self, output_path: str, target_language: str, mode: str):
+        """
+        Effectue l'export vers JSON.
+
+        Args:
+            output_path: Chemin du fichier de sortie
+            target_language: Langue cible
+            mode: "standard" ou "validated"
+        """
+        try:
+            # Obtenir les statistiques avant export
+            stats = self.got_manager.get_export_stats(target_language, mode)
+
+            # Confirmation avec statistiques
+            mode_label = "Standard" if mode == "standard" else "Unique Validé"
+            message = (
+                f"Export en mode {mode_label}\n\n"
+                f"Langue: {target_language.upper()}\n"
+                f"Fichier: {Path(output_path).name}\n\n"
+                f"Statistiques:\n"
+                f"  • Total d'entrées: {stats['total_entries']}\n"
+                f"  • Traductions utilisées: {stats['translated_entries']}\n"
+                f"  • Originaux conservés: {stats['original_entries']}\n"
+                f"  • Taux de traduction: {stats['percentage']:.1f}%\n\n"
+                f"Continuer l'export ?"
+            )
+
+            response = messagebox.askyesno("Confirmer l'export", message)
+            if not response:
+                return
+
+            # Effectuer l'export
+            self.status_label.config(text="📤 Export en cours...")
+            self.root.update()
+
+            self.got_manager.export_to_json(output_path, target_language, mode)
+
+            # Succès
+            self.status_label.config(text=f"✓ Export réussi: {Path(output_path).name}")
+
+            messagebox.showinfo(
+                "Export réussi",
+                f"Le fichier a été exporté avec succès !\n\n"
+                f"Fichier: {output_path}\n"
+                f"Langue: {target_language.upper()}\n"
+                f"Mode: {mode_label}\n"
+                f"Entrées traduites: {stats['translated_entries']}/{stats['total_entries']}"
+            )
+
+        except ValueError as e:
+            messagebox.showerror("Erreur", f"Erreur de configuration:\n{str(e)}")
+            self.status_label.config(text="❌ Erreur d'export")
+
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de l'export:\n{str(e)}")
+            self.status_label.config(text="❌ Erreur d'export")
+
+    def _update_character_count(self):
+        """Met à jour l'affichage du compteur de caractères dans la barre de statut."""
+        try:
+            # Obtenir le compteur par provider
+            counts = self.ai_client.get_character_count_by_provider()
+
+            # Gérer DeepL séparément
+            deepl_count = counts.get("deepl", 0)
+            if deepl_count > 0:
+                # Récupérer la limite configurée
+                deepl_config = self.translation_config.get("ai_config", {}).get("deepl", {})
+                limit = deepl_config.get("character_limit", 0)
+
+                if limit > 0:
+                    percentage = (deepl_count / limit) * 100
+                    # Changer la couleur selon le pourcentage
+                    if percentage >= 90:
+                        self.deepl_count_label.config(text=f"DLP: {deepl_count:,} car. ({percentage:.0f}%)", foreground="red")
+                    elif percentage >= 70:
+                        self.deepl_count_label.config(text=f"DLP: {deepl_count:,} car. ({percentage:.0f}%)", foreground="orange")
+                    else:
+                        self.deepl_count_label.config(text=f"DLP: {deepl_count:,} car.", foreground="green")
+                else:
+                    self.deepl_count_label.config(text=f"DLP: {deepl_count:,} car.", foreground="blue")
+            else:
+                self.deepl_count_label.config(text="")
+
+            # Filtrer pour les autres providers payants (sans DeepL)
+            other_paid_providers = ["openai", "mistral", "anthropic"]
+            active_counts = {name: count for name, count in counts.items()
+                           if name in other_paid_providers and count > 0}
+
+            if active_counts:
+                # Formater l'affichage
+                total = sum(active_counts.values())
+                display_text = f"📊 {total:,} car."
+                self.char_count_label.config(text=display_text)
+            else:
+                self.char_count_label.config(text="📊 0 car.")
+
+        except Exception as e:
+            print(f"Erreur mise à jour compteur: {e}")
+
+        # Répéter toutes les 2 secondes
+        self.root.after(2000, self._update_character_count)
+
+    def _show_character_usage_summary(self):
+        """Affiche un résumé de l'utilisation des caractères à la fermeture."""
+        try:
+            counts = self.ai_client.get_character_count_by_provider()
+            paid_providers = ["openai", "mistral", "anthropic", "deepl"]
+            active_counts = {name: count for name, count in counts.items()
+                           if name in paid_providers and count > 0}
+
+            if active_counts:
+                message = "📊 Résumé de l'utilisation durant cette session:\n\n"
+
+                for name, count in sorted(active_counts.items()):
+                    message += f"  • {name.upper()}: {count:,} caractères\n"
+
+                total = sum(active_counts.values())
+                message += f"\n  Total: {total:,} caractères\n"
+
+                # Ajouter des estimations de coût approximatives
+                message += "\n💰 Estimation de coût approximative:\n"
+
+                if "openai" in active_counts:
+                    # GPT-4: ~$0.03 / 1K tokens (~4 chars/token = ~4K chars)
+                    cost = (active_counts["openai"] / 4000) * 0.03
+                    message += f"  • OpenAI: ~${cost:.4f}\n"
+
+                if "anthropic" in active_counts:
+                    # Claude: ~$0.015 / 1K tokens
+                    cost = (active_counts["anthropic"] / 4000) * 0.015
+                    message += f"  • Anthropic: ~${cost:.4f}\n"
+
+                if "mistral" in active_counts:
+                    # Mistral: ~$0.002 / 1K tokens
+                    cost = (active_counts["mistral"] / 4000) * 0.002
+                    message += f"  • Mistral: ~${cost:.4f}\n"
+
+                if "deepl" in active_counts:
+                    # DeepL: récupérer la limite configurée
+                    chars = active_counts["deepl"]
+                    deepl_config = self.translation_config.get("ai_config", {}).get("deepl", {})
+                    limit = deepl_config.get("character_limit", 500000)
+                    is_pro = deepl_config.get("is_pro", False)
+
+                    if limit > 0:
+                        percentage = (chars / limit) * 100
+                        message += f"  • DeepL: {chars:,} / {limit:,} chars ({percentage:.1f}%)\n"
+                        if chars > limit:
+                            message += f"    ⚠️ Limite dépassée!\n"
+                    else:
+                        message += f"  • DeepL: {chars:,} chars (pas de limite configurée)\n"
+
+                    if not is_pro:
+                        message += f"    ℹ️ Compte gratuit: 500,000 chars/mois\n"
+
+                message += "\nℹ️ Ces estimations sont approximatives."
+
+                messagebox.showinfo("Utilisation des APIs", message)
+        except Exception as e:
+            print(f"Erreur affichage résumé: {e}")
+
     def run(self):
         """Lance l'application."""
+        # Intercepter la fermeture pour afficher le résumé et vérifier les modifications
+        def on_closing():
+            # Vérifier si des modifications non sauvegardées existent
+            if self.has_unsaved_changes and self.got_manager:
+                # Vérifier l'option de sauvegarde automatique
+                auto_save = self.translation_config.get("auto_save_on_exit", False)
+
+                if auto_save:
+                    # Sauvegarde automatique
+                    try:
+                        self.got_manager.save_to_file()
+                        self.chat_panel.add_message("system", "✓ Fichier sauvegardé automatiquement")
+                    except Exception as e:
+                        # En cas d'erreur, demander à l'utilisateur
+                        messagebox.showerror("Erreur de sauvegarde automatique",
+                            f"Impossible de sauvegarder automatiquement:\n{e}\n\nLe fichier n'a pas été sauvegardé.")
+                else:
+                    # Demander confirmation à l'utilisateur
+                    response = messagebox.askyesnocancel(
+                        "Modifications non sauvegardées",
+                        "Le fichier contient des modifications non sauvegardées.\n\n"
+                        "Voulez-vous sauvegarder avant de quitter ?\n\n"
+                        "Oui: Sauvegarder et quitter\n"
+                        "Non: Quitter sans sauvegarder\n"
+                        "Annuler: Revenir à l'application"
+                    )
+
+                    if response is None:  # Annuler
+                        return
+                    elif response:  # Oui - Sauvegarder
+                        try:
+                            self.got_manager.save_to_file()
+                            self.chat_panel.add_message("system", "✓ Fichier sauvegardé")
+                        except Exception as e:
+                            messagebox.showerror("Erreur", f"Impossible de sauvegarder:\n{e}")
+                            return  # Ne pas quitter si la sauvegarde a échoué
+                    # Si Non, continuer sans sauvegarder
+
+            # Afficher le résumé d'utilisation des APIs
+            self._show_character_usage_summary()
+            self.root.destroy()
+
+        self.root.protocol("WM_DELETE_WINDOW", on_closing)
         self.root.mainloop()
 
 

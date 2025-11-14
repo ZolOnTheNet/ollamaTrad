@@ -1,0 +1,373 @@
+# -*- coding: utf-8 -*-
+"""
+Formulaire de traduction par lot (batch) pour les sous-arbres.
+
+Permet de traduire récursivement toutes les feuilles d'un sous-arbre
+avec barre de progression et possibilité d'interruption.
+"""
+
+import tkinter as tk
+from tkinter import ttk
+from typing import Optional, Callable
+
+
+class BatchTranslationForm(ttk.Frame):
+    """
+    Formulaire pour la traduction par lot d'un sous-arbre.
+
+    Affiche:
+    - Boutons pour chaque langue disponible
+    - Barre de progression avec chemin actuel
+    - Bouton d'interruption
+    """
+
+    def __init__(self, parent, visible_languages: list = None,
+                 on_batch_translate: Optional[Callable] = None):
+        """
+        Initialise le formulaire de traduction par lot.
+
+        Args:
+            parent: Widget parent
+            visible_languages: Liste des langues visibles (ex: ["fr", "en"])
+            on_batch_translate: Callback(langue) appelé lors du clic sur un bouton langue
+        """
+        super().__init__(parent)
+
+        self.visible_languages = visible_languages or []
+        self.on_batch_translate = on_batch_translate
+        self.current_path = None
+        self.is_processing = False
+        self.field_checkboxes = {}  # {field_name: BooleanVar}
+        self.all_leaves = []  # Liste de tous les chemins de feuilles
+        self.field_to_paths = {}  # {field_name: [list of paths]}
+
+        self._create_widgets()
+
+    def _create_widgets(self):
+        """Crée les widgets du formulaire."""
+        # === Header (toujours visible) ===
+        header_frame = ttk.Frame(self)
+        header_frame.pack(fill="x", padx=10, pady=10)
+
+        ttk.Label(header_frame, text="📦 Traduction par lot",
+                 font=("Arial", 12, "bold")).pack(anchor="w")
+
+        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=10, pady=5)
+
+        # === Chemin sélectionné (toujours visible) ===
+        path_frame = ttk.Frame(self)
+        path_frame.pack(fill="x", padx=10, pady=5)
+
+        ttk.Label(path_frame, text="📍 Branche:",
+                 font=("Arial", 9, "bold")).pack(side="left")
+
+        self.path_label = ttk.Label(path_frame, text="(aucune sélection)",
+                                    font=("Arial", 9), foreground="gray")
+        self.path_label.pack(side="left", padx=5)
+
+        # === CONFIGURATION FRAME (masqué pendant traitement) ===
+        self.config_frame = ttk.Frame(self)
+        self.config_frame.pack(fill="both", expand=True)
+
+        # === Liste des feuilles avec checkboxes ===
+        leaves_frame = ttk.LabelFrame(self.config_frame, text="Feuilles à traduire", padding=10)
+        leaves_frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # Boutons de sélection
+        selection_buttons = ttk.Frame(leaves_frame)
+        selection_buttons.pack(fill="x", pady=(0, 5))
+
+        ttk.Button(selection_buttons, text="✓ Tout sélectionner",
+                  command=self._select_all).pack(side="left", padx=2)
+        ttk.Button(selection_buttons, text="☐ Tout désélectionner",
+                  command=self._deselect_all).pack(side="left", padx=2)
+
+        # Zone scrollable pour les checkboxes
+        canvas_frame = ttk.Frame(leaves_frame)
+        canvas_frame.pack(fill="both", expand=True)
+
+        # Canvas + Scrollbar
+        self.leaves_canvas = tk.Canvas(canvas_frame, height=200, bg="white")
+        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical",
+                                  command=self.leaves_canvas.yview)
+        self.leaves_scrollable_frame = ttk.Frame(self.leaves_canvas)
+
+        self.leaves_scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.leaves_canvas.configure(scrollregion=self.leaves_canvas.bbox("all"))
+        )
+
+        self.leaves_canvas.create_window((0, 0), window=self.leaves_scrollable_frame,
+                                        anchor="nw")
+        self.leaves_canvas.configure(yscrollcommand=scrollbar.set)
+
+        self.leaves_canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Label pour le compteur
+        self.selection_count_label = ttk.Label(leaves_frame,
+                                              text="0 / 0 sélectionné(s)",
+                                              font=("Arial", 8), foreground="gray")
+        self.selection_count_label.pack(anchor="w", pady=(5, 0))
+
+        # === Boutons de langue ===
+        self.buttons_frame = ttk.LabelFrame(self.config_frame, text="Langues cibles", padding=10)
+        self.buttons_frame.pack(fill="x", padx=10, pady=10)
+
+        self.language_buttons = {}
+        self._create_language_buttons()
+
+        # === PROGRESS FRAME (masqué par défaut, remplace config_frame pendant traitement) ===
+        self.progress_frame = ttk.Frame(self)
+        # Ne pas pack() par défaut, sera affiché pendant le traitement
+
+        # Barre de progression
+        progress_bar_frame = ttk.Frame(self.progress_frame)
+        progress_bar_frame.pack(fill="x", padx=10, pady=5)
+
+        ttk.Label(progress_bar_frame, text="Progression:",
+                 font=("Arial", 9, "bold")).pack(anchor="w")
+
+        self.progress_bar = ttk.Progressbar(progress_bar_frame, mode='determinate')
+        self.progress_bar.pack(fill="x", pady=5)
+
+        # Label de progression
+        self.progress_label = ttk.Label(progress_bar_frame, text="0 / 0",
+                                       font=("Arial", 8))
+        self.progress_label.pack(anchor="w")
+
+        # Chemin en cours
+        current_path_frame = ttk.Frame(self.progress_frame)
+        current_path_frame.pack(fill="x", padx=10, pady=5)
+
+        ttk.Label(current_path_frame, text="En cours:",
+                 font=("Arial", 9, "bold")).pack(anchor="w")
+
+        self.current_path_label = ttk.Label(current_path_frame, text="",
+                                           font=("Arial", 8), foreground="blue",
+                                           wraplength=400)
+        self.current_path_label.pack(anchor="w", padx=5)
+
+        # Bouton Stop
+        self.stop_button = ttk.Button(self.progress_frame, text="⏹ Arrêter",
+                                     command=self._on_stop_clicked)
+        self.stop_button.pack(pady=10)
+
+    def _create_language_buttons(self):
+        """Crée les boutons pour chaque langue visible."""
+        # Vider les anciens boutons
+        for widget in self.buttons_frame.winfo_children():
+            widget.destroy()
+        self.language_buttons.clear()
+
+        if not self.visible_languages:
+            ttk.Label(self.buttons_frame, text="Aucune langue configurée",
+                     foreground="gray").pack()
+            return
+
+        # Créer un bouton par langue
+        for lang in self.visible_languages:
+            btn = ttk.Button(self.buttons_frame,
+                           text=f"🔄 Traduire en {lang.upper()}",
+                           command=lambda l=lang: self._on_language_clicked(l))
+            btn.pack(fill="x", pady=3)
+            self.language_buttons[lang] = btn
+
+    def set_visible_languages(self, languages: list):
+        """
+        Définit les langues visibles.
+
+        Args:
+            languages: Liste des codes langues (ex: ["fr", "en"])
+        """
+        self.visible_languages = languages
+        self._create_language_buttons()
+
+    def load_branch(self, path: str, leaves: list):
+        """
+        Charge une branche pour traduction par lot.
+
+        Args:
+            path: Chemin de la branche (ex: "app/settings")
+            leaves: Liste des chemins des feuilles traduisibles (ex: ["entries/Demon/name", ...])
+        """
+        self.current_path = path
+        self.path_label.config(text=path, foreground="blue")
+
+        # Sauvegarder la liste des feuilles
+        self.all_leaves = leaves
+
+        # Grouper les feuilles par nom de champ final
+        # Ex: {"name": ["entries/A/name", "entries/B/name"], "tokenName": [...]}
+        self.field_to_paths = {}
+        for leaf_path in leaves:
+            # Extraire le nom du champ final
+            field_name = leaf_path.split("/")[-1]
+
+            if field_name not in self.field_to_paths:
+                self.field_to_paths[field_name] = []
+            self.field_to_paths[field_name].append(leaf_path)
+
+        # Nettoyer les anciennes checkboxes
+        for widget in self.leaves_scrollable_frame.winfo_children():
+            widget.destroy()
+        self.field_checkboxes.clear()
+
+        # Créer une checkbox par nom de champ UNIQUE (triée alphabétiquement)
+        for field_name in sorted(self.field_to_paths.keys()):
+            var = tk.BooleanVar(value=True)  # Par défaut, tout est sélectionné
+            self.field_checkboxes[field_name] = var
+
+            # Compter combien de fois ce champ apparaît
+            count = len(self.field_to_paths[field_name])
+
+            # Afficher le nom du champ avec le nombre d'occurrences
+            if count > 1:
+                display_text = f"{field_name} ({count}×)"
+            else:
+                display_text = field_name
+
+            # Créer la checkbox
+            cb = ttk.Checkbutton(self.leaves_scrollable_frame,
+                                text=display_text,
+                                variable=var,
+                                command=self._update_selection_count)
+            cb.pack(anchor="w", pady=1)
+
+        # Mettre à jour le compteur
+        self._update_selection_count()
+
+        # Réinitialiser l'état
+        self.is_processing = False
+        self._hide_progress()
+        self._enable_buttons()
+
+    def _on_language_clicked(self, lang: str):
+        """
+        Appelé lors du clic sur un bouton de langue.
+
+        Args:
+            lang: Code langue (ex: "fr")
+        """
+        if self.on_batch_translate and not self.is_processing:
+            self.on_batch_translate(lang)
+
+    def start_processing(self, total_leaves: int):
+        """
+        Démarre le traitement (affiche la barre de progression).
+
+        Args:
+            total_leaves: Nombre total de feuilles à traiter
+        """
+        self.is_processing = True
+        self._disable_buttons()
+        self._show_progress()
+
+        self.progress_bar['maximum'] = total_leaves
+        self.progress_bar['value'] = 0
+        self.progress_label.config(text=f"0 / {total_leaves}")
+        self.current_path_label.config(text="Initialisation...")
+
+    def update_progress(self, current: int, total: int, current_path: str):
+        """
+        Met à jour la barre de progression.
+
+        Args:
+            current: Nombre de feuilles traitées
+            total: Nombre total de feuilles
+            current_path: Chemin en cours de traitement
+        """
+        self.progress_bar['value'] = current
+        self.progress_label.config(text=f"{current} / {total}")
+        self.current_path_label.config(text=current_path)
+
+        # Forcer la mise à jour de l'interface
+        self.update_idletasks()
+
+    def finish_processing(self, success: bool = True):
+        """
+        Termine le traitement.
+
+        Args:
+            success: True si terminé avec succès, False si interrompu
+        """
+        self.is_processing = False
+        self._enable_buttons()
+
+        if success:
+            self.current_path_label.config(text="✓ Traitement terminé avec succès",
+                                          foreground="green")
+        else:
+            self.current_path_label.config(text="⏹ Traitement interrompu",
+                                          foreground="orange")
+
+        # Cacher la barre de progression après 3 secondes
+        self.after(3000, self._hide_progress)
+
+    def _on_stop_clicked(self):
+        """Appelé lors du clic sur le bouton Stop."""
+        self.is_processing = False
+        # Le traitement doit vérifier is_processing périodiquement
+
+    def _show_progress(self):
+        """Affiche la zone de progression et cache la configuration."""
+        self.config_frame.pack_forget()  # Cacher la configuration
+        self.progress_frame.pack(fill="both", expand=True, padx=10, pady=10)  # Afficher la progression
+
+    def _hide_progress(self):
+        """Cache la zone de progression et réaffiche la configuration."""
+        self.progress_frame.pack_forget()  # Cacher la progression
+        self.config_frame.pack(fill="both", expand=True)  # Réafficher la configuration
+
+    def _enable_buttons(self):
+        """Active les boutons de langue."""
+        for btn in self.language_buttons.values():
+            btn.config(state="normal")
+
+    def _disable_buttons(self):
+        """Désactive les boutons de langue."""
+        for btn in self.language_buttons.values():
+            btn.config(state="disabled")
+
+    def is_stopped(self) -> bool:
+        """
+        Vérifie si l'utilisateur a demandé l'arrêt.
+
+        Returns:
+            True si l'arrêt a été demandé
+        """
+        return not self.is_processing
+
+    def get_selected_leaves(self) -> list:
+        """
+        Retourne la liste des feuilles sélectionnées (cochées).
+
+        Returns:
+            Liste des chemins des feuilles cochées
+        """
+        selected = []
+        for field_name, var in self.field_checkboxes.items():
+            if var.get():  # Si la checkbox est cochée
+                # Ajouter tous les chemins correspondant à ce champ
+                selected.extend(self.field_to_paths[field_name])
+        return selected
+
+    def _select_all(self):
+        """Coche toutes les checkboxes."""
+        for var in self.field_checkboxes.values():
+            var.set(True)
+        self._update_selection_count()
+
+    def _deselect_all(self):
+        """Décoche toutes les checkboxes."""
+        for var in self.field_checkboxes.values():
+            var.set(False)
+        self._update_selection_count()
+
+    def _update_selection_count(self):
+        """Met à jour le compteur de sélection."""
+        selected_count = sum(1 for var in self.field_checkboxes.values() if var.get())
+        total_count = len(self.field_checkboxes)
+        self.selection_count_label.config(
+            text=f"{selected_count} / {total_count} sélectionné(s)"
+        )
