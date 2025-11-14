@@ -47,17 +47,37 @@ class TranslationTab(ttk.Frame):
 
     def _create_widgets(self):
         """Crée les widgets de l'onglet."""
-        # === Sélecteur de champs ===
+        # === Sélecteur de champs (hauteur limitée pour laisser place aux boutons) ===
+        selector_frame = ttk.Frame(self, height=250)
+        selector_frame.pack(fill="both", expand=False, padx=10, pady=(10, 0))
+        selector_frame.pack_propagate(False)  # Empêcher le frame de se redimensionner
+
         self.field_selector = FieldSelector(
-            self,
+            selector_frame,
             title="Champs à traduire (si pas validé)",
             on_selection_changed=self.on_selection_changed
         )
-        self.field_selector.pack(fill="both", expand=True, padx=10, pady=10)
+        self.field_selector.pack(fill="both", expand=True)
 
-        # === Boutons de langue ===
-        self.buttons_frame = ttk.LabelFrame(self, text="Langues cibles", padding=10)
-        self.buttons_frame.pack(fill="x", padx=10, pady=10)
+        # === Boutons de langue (avec scrollbar si nécessaire) ===
+        buttons_container = ttk.Frame(self)
+        buttons_container.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Canvas avec scrollbar pour les boutons de langue
+        canvas = tk.Canvas(buttons_container, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(buttons_container, orient="vertical", command=canvas.yview)
+
+        self.buttons_frame = ttk.Frame(canvas)
+        self.buttons_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=self.buttons_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
         self.language_buttons = {}
         self._create_language_buttons()
