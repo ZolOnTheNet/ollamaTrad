@@ -51,5 +51,6 @@
       "is_pro": false,
       "character_limit": 500000
     }
-  }
+  },
+  "auto_save_on_exit": true
 }

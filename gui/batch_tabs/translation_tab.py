@@ -19,6 +19,7 @@ class TranslationTab(ttk.Frame):
     def __init__(self, parent, visible_languages: list = None,
                  on_translate: Optional[Callable] = None,
                  on_deepl_translate: Optional[Callable] = None,
+                 on_clear_unvalidated: Optional[Callable] = None,
                  got_manager=None,
                  translation_config: dict = None):
         """
@@ -29,6 +30,7 @@ class TranslationTab(ttk.Frame):
             visible_languages: Liste des langues visibles (ex: ["fr", "en"])
             on_translate: Callback(langue, selected_paths) appelé lors du clic sur un bouton langue
             on_deepl_translate: Callback(langue, selected_paths) appelé lors du clic sur un bouton DeepL
+            on_clear_unvalidated: Callback(langue, selected_paths) appelé pour effacer les non validés
             got_manager: GotJsonManager pour accéder aux données
             translation_config: Configuration de traduction (pour vérifier si DeepL est activé)
         """
@@ -37,6 +39,7 @@ class TranslationTab(ttk.Frame):
         self.visible_languages = visible_languages or []
         self.on_translate = on_translate
         self.on_deepl_translate = on_deepl_translate
+        self.on_clear_unvalidated = on_clear_unvalidated
         self.got_manager = got_manager
         self.translation_config = translation_config or {}
 
@@ -60,7 +63,7 @@ class TranslationTab(ttk.Frame):
         self._create_language_buttons()
 
     def _create_language_buttons(self):
-        """Crée les boutons pour chaque langue visible."""
+        """Crée les boutons pour chaque langue visible avec nouvelle mise en page."""
         # Vider les anciens boutons
         for widget in self.buttons_frame.winfo_children():
             widget.destroy()
@@ -73,31 +76,43 @@ class TranslationTab(ttk.Frame):
 
         # Vérifier si DeepL est activé
         deepl_enabled = self.translation_config.get("ai_config", {}).get("deepl", {}).get("enabled", False)
+        known_languages = self.translation_config.get("known_languages", {})
 
-        # Créer un bouton par langue
+        # Créer une section par langue
         for lang in self.visible_languages:
-            # Frame pour regrouper les boutons de cette langue
-            lang_frame = ttk.Frame(self.buttons_frame)
-            lang_frame.pack(fill="x", pady=3)
+            # Récupérer le nom complet de la langue
+            lang_name = known_languages.get(lang, lang.upper())
 
-            # Bouton de traduction normale
-            btn = ttk.Button(lang_frame,
-                           text=f"🔄 Traduire en {lang.upper()}",
-                           command=lambda l=lang: self._on_language_clicked(l))
-            btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
-            self.language_buttons[lang] = btn
+            # === LABELFRAME pour chaque langue ===
+            lang_labelframe = ttk.LabelFrame(self.buttons_frame, text=f"🌍 {lang_name}", padding=5)
+            lang_labelframe.pack(fill="x", pady=5)
 
-            # Bouton DeepL si activé
+            # Frame pour les boutons (alignés horizontalement)
+            buttons_row = ttk.Frame(lang_labelframe)
+            buttons_row.pack(fill="x")
+
+            # === Bouton 1 : Traduire par IA ===
+            ai_btn = ttk.Button(buttons_row,
+                               text="🔄 Traduire par IA",
+                               command=lambda l=lang: self._on_language_clicked(l))
+            ai_btn.pack(side="left", fill="x", expand=True, padx=(0, 3))
+            self.language_buttons[lang] = ai_btn
+
+            # === Bouton 2 : DeepL (si activé) ===
             if deepl_enabled and self.on_deepl_translate:
-                # Récupérer le nom complet de la langue
-                known_languages = self.translation_config.get("known_languages", {})
-                lang_name = known_languages.get(lang, lang.upper())
-
-                deepl_btn = ttk.Button(lang_frame,
+                deepl_btn = ttk.Button(buttons_row,
                                      text=f"🌐 DeepL: {lang_name} (...)",
                                      command=lambda l=lang: self._on_deepl_clicked(l))
-                deepl_btn.pack(side="left", fill="x", expand=True)
+                deepl_btn.pack(side="left", fill="x", expand=True, padx=(0, 3))
                 self.language_buttons[f"deepl_{lang}"] = deepl_btn
+
+            # === Bouton 3 : Effacer les Non Validés ===
+            if self.on_clear_unvalidated:
+                clear_btn = ttk.Button(buttons_row,
+                                      text="🗑️ Effacer Non Validés",
+                                      command=lambda l=lang: self._on_clear_unvalidated_clicked(l))
+                clear_btn.pack(side="left", fill="x", expand=True)
+                self.language_buttons[f"clear_{lang}"] = clear_btn
 
     def _on_language_clicked(self, lang: str):
         """
@@ -120,6 +135,17 @@ class TranslationTab(ttk.Frame):
         if self.on_deepl_translate:
             selected_paths = self.field_selector.get_selected_paths()
             self.on_deepl_translate(lang, selected_paths)
+
+    def _on_clear_unvalidated_clicked(self, lang: str):
+        """
+        Appelé lors du clic sur le bouton "Effacer Non Validés".
+
+        Args:
+            lang: Code langue (ex: "fr")
+        """
+        if self.on_clear_unvalidated:
+            selected_paths = self.field_selector.get_selected_paths()
+            self.on_clear_unvalidated(lang, selected_paths)
 
     def _calculate_character_count(self, paths: list, lang: str = None) -> int:
         """

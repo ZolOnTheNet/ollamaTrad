@@ -238,6 +238,7 @@ class OllamaTradGUI:
             visible_languages=self.translation_config.get("visible_languages", []),
             on_batch_translate=self._on_batch_translate,
             on_batch_deepl_translate=self._on_batch_deepl_translate,
+            on_clear_unvalidated=self._on_batch_clear_unvalidated,
             got_manager=self.got_manager,
             translation_config=self.translation_config
         )
@@ -1310,6 +1311,102 @@ class OllamaTradGUI:
         # Lancer le thread
         thread = threading.Thread(target=batch_process_deepl, daemon=True)
         thread.start()
+
+    def _on_batch_clear_unvalidated(self, lang: str, selected_paths: list):
+        """
+        Efface les traductions non validées pour une langue (les met dans l'historique).
+
+        Args:
+            lang: Code langue (ex: "fr")
+            selected_paths: Liste des chemins sélectionnés
+        """
+        if not self.got_manager:
+            return
+
+        # Confirmation
+        from tkinter import messagebox
+        confirmed = messagebox.askyesno(
+            "Confirmation",
+            f"Voulez-vous effacer toutes les traductions NON VALIDÉES en {lang.upper()} pour les {len(selected_paths)} champ(s) sélectionné(s) ?\n\n"
+            f"Les traductions seront sauvegardées dans l'historique avant d'être effacées.\n"
+            f"Les traductions VALIDÉES (✓) ne seront PAS affectées."
+        )
+
+        if not confirmed:
+            return
+
+        # Démarrer le traitement
+        self.batch_form.start_processing(len(selected_paths))
+
+        # Sauvegarder le chemin de la branche pour la resélectionner après
+        branch_path = self.current_entry_state.get("path", "")
+
+        # Compteurs
+        cleared_count = 0
+        skipped_count = 0
+
+        # Traiter chaque feuille
+        for i, leaf_path in enumerate(selected_paths):
+            # Mettre à jour la progression
+            self.root.after(0, lambda curr=i, tot=len(selected_paths), p=leaf_path:
+                            self.batch_form.update_progress(curr, tot, p))
+
+            try:
+                # Récupérer l'entrée
+                entry = self.got_manager._get_entry_by_path(leaf_path)
+
+                # Vérifier si c'est bien une entrée traduisible
+                if not isinstance(entry, dict) or "ori" not in entry:
+                    continue
+
+                # Vérifier si la langue existe dans l'entrée
+                if lang not in entry:
+                    continue
+
+                lang_data = entry[lang]
+                if isinstance(lang_data, dict):
+                    is_validated = lang_data.get("valid", False)
+                    translation_text = lang_data.get("text", "")
+
+                    # Si validé, on ne touche pas
+                    if is_validated:
+                        skipped_count += 1
+                        continue
+
+                    # Si non vide, on l'efface (avec historique)
+                    if translation_text and translation_text.strip():
+                        # Ajouter à l'historique
+                        history = lang_data.get("history", [])
+                        if translation_text not in history:
+                            history.append(translation_text)
+
+                        # Mettre à jour : vider le texte mais garder l'historique
+                        self.got_manager.update_translation(leaf_path, lang, "")
+                        cleared_count += 1
+
+                        # Marquer comme modifié
+                        self.root.after(0, self._mark_as_modified)
+
+            except Exception as e:
+                print(f"Erreur lors de l'effacement de {leaf_path}: {e}")
+                continue
+
+        # Terminer le traitement
+        self.root.after(0, lambda: self.batch_form.finish_processing(success=True))
+
+        # Rafraîchir l'arbre
+        self.root.after(0, self._populate_tree)
+
+        # Resélectionner la branche
+        if branch_path:
+            self.root.after(100, lambda: self._select_tree_item(branch_path))
+
+        # Message de résumé
+        summary_msg = f"✓ Effacement terminé :\n\n"
+        summary_msg += f"  • {cleared_count} traduction(s) effacée(s)\n"
+        summary_msg += f"  • {skipped_count} traduction(s) validée(s) conservée(s)"
+
+        self.root.after(0, lambda: messagebox.showinfo("Effacement terminé", summary_msg))
 
     def _on_batch_translate(self, lang: str, selected_paths: list):
         """

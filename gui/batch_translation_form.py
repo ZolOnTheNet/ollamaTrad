@@ -37,6 +37,7 @@ class BatchTranslationForm(ttk.Frame):
     def __init__(self, parent, visible_languages: list = None,
                  on_batch_translate: Optional[Callable] = None,
                  on_batch_deepl_translate: Optional[Callable] = None,
+                 on_clear_unvalidated: Optional[Callable] = None,
                  on_search_replace: Optional[Callable] = None,
                  on_undo: Optional[Callable] = None,
                  got_manager=None,
@@ -49,6 +50,7 @@ class BatchTranslationForm(ttk.Frame):
             visible_languages: Liste des langues visibles (ex: ["fr", "en"])
             on_batch_translate: Callback(langue, selected_paths) pour la traduction
             on_batch_deepl_translate: Callback(langue, selected_paths) pour la traduction DeepL
+            on_clear_unvalidated: Callback(langue, selected_paths) pour effacer les non validés
             on_search_replace: Callback(search, replace, selected_paths, options) pour rechercher/remplacer
             on_undo: Callback(selected_paths, mode) pour annuler les modifications
             got_manager: GotJsonManager pour accéder aux données
@@ -59,6 +61,7 @@ class BatchTranslationForm(ttk.Frame):
         self.visible_languages = visible_languages or []
         self.on_batch_translate = on_batch_translate
         self.on_batch_deepl_translate = on_batch_deepl_translate
+        self.on_clear_unvalidated = on_clear_unvalidated
         self.on_search_replace = on_search_replace
         self.on_undo = on_undo
         self.got_manager = got_manager
@@ -106,6 +109,7 @@ class BatchTranslationForm(ttk.Frame):
             visible_languages=self.visible_languages,
             on_translate=self._on_translate_clicked,
             on_deepl_translate=self._on_deepl_translate_clicked,
+            on_clear_unvalidated=self._on_clear_unvalidated_clicked,
             got_manager=self.got_manager,
             translation_config=self.translation_config
         )
@@ -170,6 +174,11 @@ class BatchTranslationForm(ttk.Frame):
         """Callback pour la traduction DeepL."""
         if self.on_batch_deepl_translate and not self.is_processing:
             self.on_batch_deepl_translate(lang, selected_paths)
+
+    def _on_clear_unvalidated_clicked(self, lang: str, selected_paths: list):
+        """Callback pour effacer les non validés."""
+        if self.on_clear_unvalidated and not self.is_processing:
+            self.on_clear_unvalidated(lang, selected_paths)
 
     def _on_search_replace_clicked(self, search_text: str, replace_text: str,
                                    selected_paths: list, options: dict):
