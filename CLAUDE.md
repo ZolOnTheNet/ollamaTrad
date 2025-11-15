@@ -4,12 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## ⚠️ IMPORTANT: Git Branch Policy
 
-**ALWAYS use the branch: `claude/developpement-0157HNsrYJv3uYsHdcEi2fuL`**
+**Branch Naming Constraint**: Claude Code can only push to branches ending with the current session ID.
 
-- NEVER create new branches
-- ALL development work must be done on `claude/developpement-0157HNsrYJv3uYsHdcEi2fuL`
-- ALWAYS push to this branch when changes are made
-- Check out this branch at the start of any work session
+**Development Branch**: `claude/developpement-0157HNsrYJv3uYsHdcEi2fuL`
+
+**Workflow**:
+1. Claude creates session branches: `claude/<description>-<sessionID>`
+2. Claude pushes all changes to the session branch
+3. User merges session branch into `claude/developpement-0157HNsrYJv3uYsHdcEi2fuL` using scripts
+4. User can clean up old session branches after merging
+
+**Scripts Available**:
+- `scripts/fusionne.sh` or `scripts/fusionne.ps1` - Merge session branch into development
+- `scripts/nettoyer-branches.sh` or `scripts/nettoyer-branches.ps1` - Clean up old branches
+
+**Usage**:
+```bash
+# Ubuntu/Linux - Merge Claude's work (preserves current branch)
+./scripts/fusionne.sh claude/fix-safe-directory-warning-01MdoVv6j7to7ph4yW1cw7wf
+
+# PowerShell - Merge Claude's work
+.\scripts\fusionne.ps1 claude/fix-safe-directory-warning-01MdoVv6j7to7ph4yW1cw7wf
+
+# Clean up old branches
+./scripts/nettoyer-branches.sh
+.\scripts\nettoyer-branches.ps1
+```
 
 ## Application Overview
 
