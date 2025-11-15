@@ -394,30 +394,16 @@ class OllamaTradGUI:
             filepath: Chemin vers le fichier à charger
         """
         try:
-            import time
-
-            # Étape 1: Lecture du fichier (0-30%)
-            self.status_label.config(text="[  0%] Lecture du fichier...")
+            self.status_label.config(text="Chargement en cours...")
             self.root.update()
-            time.sleep(0.05)  # Petit délai pour que l'utilisateur voie la progression
 
             # Utiliser le chargement intelligent
             self.got_manager, got_path = load_file_intelligently(filepath)
             self.current_file_path = got_path
 
-            # Étape 2: Configuration (30-40%)
-            self.status_label.config(text="[ 30%] Configuration des langues...")
-            self.root.update()
-            time.sleep(0.05)
-
             # Appliquer les langues configurées par l'utilisateur
             self.got_manager.target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
             self.translation_form.visible_languages = self.translation_config.get("visible_languages", [])
-
-            # Étape 3: Mise à jour des formulaires (40-50%)
-            self.status_label.config(text="[ 40%] Mise à jour des formulaires...")
-            self.root.update()
-            time.sleep(0.05)
 
             # Mettre à jour le formulaire
             self.translation_form.set_got_manager(self.got_manager)
@@ -426,18 +412,8 @@ class OllamaTradGUI:
             self.batch_form.set_got_manager(self.got_manager)
             self.batch_form.set_translation_config(self.translation_config)
 
-            # Étape 4: Construction de l'arbre (50-90%)
-            self.status_label.config(text="[ 50%] Construction de l'arbre...")
-            self.root.update()
-            time.sleep(0.05)
-
             # Charger l'arbre
             self._populate_tree()
-
-            # Étape 5: Finalisation (90-100%)
-            self.status_label.config(text="[ 90%] Finalisation...")
-            self.root.update()
-            time.sleep(0.05)
 
             # Mettre à jour la barre de statut
             filename = Path(got_path).name
