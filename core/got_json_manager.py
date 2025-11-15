@@ -194,11 +194,34 @@ class GotJsonManager:
         """
         entry = self._get_entry_by_path(path)
 
-        if lang not in entry or lang == "ori":
+        if lang == "ori":
             raise ValueError(f"Langue invalide: {lang}")
 
+        # S'assurer que la structure existe pour cette langue
+        if lang not in entry:
+            # Créer la structure pour cette nouvelle langue
+            entry[lang] = {
+                "text": "",
+                "valid": False,
+                "history": []
+            }
+        elif not isinstance(entry[lang], dict):
+            # Ancien format (string directe) - convertir
+            old_text = entry[lang]
+            entry[lang] = {
+                "text": old_text,
+                "valid": False,
+                "history": []
+            }
+        elif "text" not in entry[lang]:
+            # Structure dict mais sans "text" - initialiser
+            entry[lang]["text"] = ""
+
+        if "history" not in entry[lang]:
+            entry[lang]["history"] = []
+
         # Sauvegarder l'ancienne version dans history
-        current_text = entry[lang]["text"]
+        current_text = entry[lang].get("text", "")
         if current_text != "":
             entry[lang]["history"].insert(0, current_text)
 
