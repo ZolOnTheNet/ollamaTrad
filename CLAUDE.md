@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ IMPORTANT: Git Branch Policy
+
+**ALWAYS use the branch: `claude/developpement-0157HNsrYJv3uYsHdcEi2fuL`**
+
+- NEVER create new branches
+- ALL development work must be done on `claude/developpement-0157HNsrYJv3uYsHdcEi2fuL`
+- ALWAYS push to this branch when changes are made
+- Check out this branch at the start of any work session
+
 ## Application Overview
 
 OllamaTrad is a Python application for intelligent processing of JSON files using multiple AI providers (Ollama, OpenAI, Mistral, Anthropic). It provides both CLI and GUI interfaces for tasks like translation, content processing, metadata management, and direct AI dialogue with a file system-like navigation approach for JSON structures.
