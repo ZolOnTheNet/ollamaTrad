@@ -20,7 +20,7 @@ class FieldSelector(ttk.Frame):
     - Compteur de sélection
     """
 
-    def __init__(self, parent, title="Champs à traiter", on_selection_changed=None):
+    def __init__(self, parent, title="Champs à traiter", on_selection_changed=None, got_manager=None):
         """
         Initialise le sélecteur de champs.
 
@@ -28,6 +28,7 @@ class FieldSelector(ttk.Frame):
             parent: Widget parent
             title: Titre du cadre
             on_selection_changed: Callback appelé quand la sélection change
+            got_manager: GotJsonManager pour filtrer les champs
         """
         super().__init__(parent)
 
@@ -35,6 +36,8 @@ class FieldSelector(ttk.Frame):
         self.field_to_paths = {}  # {field_name: [list of paths]}
         self.all_leaves = []  # Liste de tous les chemins de feuilles
         self.on_selection_changed = on_selection_changed
+        self.got_manager = got_manager
+        self.filter_mode = tk.StringVar(value="non_validated")  # Options: "non_validated", "empty"
 
         self._create_widgets(title)
 
@@ -52,6 +55,16 @@ class FieldSelector(ttk.Frame):
                   command=self._select_all).pack(side="left", padx=2)
         ttk.Button(selection_buttons, text="☐ Tout désélectionner",
                   command=self._deselect_all).pack(side="left", padx=2)
+
+        # Options de filtrage
+        ttk.Separator(selection_buttons, orient="vertical").pack(side="left", padx=10, fill="y")
+
+        ttk.Radiobutton(selection_buttons, text="Champs non validés",
+                       variable=self.filter_mode, value="non_validated",
+                       command=self._on_filter_changed).pack(side="left", padx=5)
+        ttk.Radiobutton(selection_buttons, text="Champs vides",
+                       variable=self.filter_mode, value="empty",
+                       command=self._on_filter_changed).pack(side="left", padx=5)
 
         # Zone scrollable pour les checkboxes
         canvas_frame = ttk.Frame(main_frame)
@@ -81,6 +94,73 @@ class FieldSelector(ttk.Frame):
                                      font=("Arial", 8), foreground="gray")
         self.count_label.pack(anchor="w", pady=(5, 0))
 
+    def set_got_manager(self, got_manager):
+        """
+        Définit le GotJsonManager pour le filtrage.
+
+        Args:
+            got_manager: Instance de GotJsonManager
+        """
+        self.got_manager = got_manager
+
+    def _on_filter_changed(self):
+        """Appelé quand l'option de filtrage change."""
+        # Recharger les champs avec le nouveau filtre
+        if self.all_leaves:
+            self.load_fields(self.all_leaves)
+
+    def _should_include_field(self, leaf_path: str, current_lang: str = None) -> bool:
+        """
+        Détermine si un champ doit être inclus selon le filtre actuel.
+
+        Args:
+            leaf_path: Chemin du champ
+            current_lang: Langue actuelle (optionnel)
+
+        Returns:
+            True si le champ doit être inclus
+        """
+        if not self.got_manager:
+            return True  # Sans got_manager, inclure tous les champs
+
+        filter_mode = self.filter_mode.get()
+
+        try:
+            entry = self.got_manager._get_entry_by_path(leaf_path)
+
+            if not isinstance(entry, dict) or "ori" not in entry:
+                return False  # Pas une entrée traduisible
+
+            # Si on a une langue spécifique, vérifier pour cette langue
+            # Sinon, vérifier pour toutes les langues cibles
+            langs_to_check = [current_lang] if current_lang else self.got_manager.target_languages
+
+            for lang in langs_to_check:
+                if filter_mode == "non_validated":
+                    # Inclure si non validé (vide ou non validé)
+                    if lang not in entry:
+                        return True  # Champ vide = non validé
+                    lang_data = entry[lang]
+                    if isinstance(lang_data, dict):
+                        if not lang_data.get("valid", False):
+                            return True  # Non validé
+                    else:
+                        return True  # Format ancien = non validé
+                elif filter_mode == "empty":
+                    # Inclure seulement si complètement vide
+                    if lang not in entry:
+                        return True
+                    lang_data = entry[lang]
+                    if isinstance(lang_data, dict):
+                        if not lang_data.get("text", "").strip():
+                            return True
+                    elif not lang_data.strip():
+                        return True
+
+            return False
+        except Exception:
+            return True  # En cas d'erreur, inclure le champ
+
     def load_fields(self, leaves: list):
         """
         Charge les champs depuis une liste de chemins de feuilles.
@@ -90,9 +170,12 @@ class FieldSelector(ttk.Frame):
         """
         self.all_leaves = leaves
 
+        # Filtrer les feuilles selon le mode de filtrage
+        filtered_leaves = [leaf for leaf in leaves if self._should_include_field(leaf)]
+
         # Grouper les feuilles par nom de champ final
         self.field_to_paths = {}
-        for leaf_path in leaves:
+        for leaf_path in filtered_leaves:
             field_name = leaf_path.split("/")[-1]
 
             if field_name not in self.field_to_paths:

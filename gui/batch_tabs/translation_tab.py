@@ -54,8 +54,9 @@ class TranslationTab(ttk.Frame):
 
         self.field_selector = FieldSelector(
             selector_frame,
-            title="Champs à traduire (si pas validé)",
-            on_selection_changed=self.on_selection_changed
+            title="Champs à traduire",
+            on_selection_changed=self.on_selection_changed,
+            got_manager=self.got_manager
         )
         self.field_selector.pack(fill="both", expand=True)
 
@@ -265,6 +266,7 @@ class TranslationTab(ttk.Frame):
             got_manager: Instance de GotJsonManager
         """
         self.got_manager = got_manager
+        self.field_selector.set_got_manager(got_manager)
         self._update_deepl_button_text()
 
     def set_translation_config(self, config: dict):
