@@ -452,34 +452,21 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
         return known
 
     def _create_ia_tab(self, parent):
-        """Crée l'onglet de configuration IA"""
-        # Container avec scrollbar
-        canvas = tk.Canvas(parent, borderwidth=0, background="#f0f0f0", highlightthickness=0)
-        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
+        """Crée l'onglet de configuration IA avec disposition en colonnes"""
+        # Container principal
+        main_container = ttk.Frame(parent)
+        main_container.pack(fill="both", expand=True, padx=10, pady=10)
 
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        # Frame en deux colonnes
+        columns_frame = ttk.Frame(main_container)
+        columns_frame.pack(fill="both", expand=True)
 
-        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        # === COLONNE GAUCHE : Sélection du provider ===
+        left_frame = ttk.LabelFrame(columns_frame, text="🎯 Fournisseur d'IA", padding=10)
+        left_frame.pack(side="left", fill="both", padx=(0, 5))
 
-        def on_canvas_configure(event):
-            canvas.itemconfig(canvas_window, width=event.width)
-
-        canvas.bind("<Configure>", on_canvas_configure)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        # Sélection du fournisseur
-        provider_frame = ttk.LabelFrame(scrollable_frame, text="🎯 Fournisseur d'IA", padding=10)
-        provider_frame.pack(fill="x", padx=10, pady=10)
-
-        ttk.Label(provider_frame, text="Sélectionnez le fournisseur d'IA à utiliser:",
-                 font=("Arial", 9, "italic")).pack(anchor="w", pady=(0, 5))
+        ttk.Label(left_frame, text="Sélectionnez le fournisseur:",
+                 font=("Arial", 9, "italic")).pack(anchor="w", pady=(0, 10))
 
         providers = [
             ("Ollama (local)", "ollama"),
@@ -488,16 +475,19 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
             ("Anthropic Claude", "anthropic")
         ]
         for text, value in providers:
-            ttk.Radiobutton(provider_frame, text=text, variable=self.ai_provider_var,
-                          value=value, command=self._on_provider_changed).pack(anchor="w", pady=2)
+            ttk.Radiobutton(left_frame, text=text, variable=self.ai_provider_var,
+                          value=value, command=self._on_provider_changed).pack(anchor="w", pady=3)
+
+        # === COLONNE DROITE : Configuration du provider sélectionné ===
+        right_frame = ttk.Frame(columns_frame)
+        right_frame.pack(side="left", fill="both", expand=True, padx=(5, 0))
 
         # Configuration Ollama
-        self.ollama_config_frame = ttk.LabelFrame(scrollable_frame, text="⚙️ Configuration Ollama", padding=10)
-        self.ollama_config_frame.pack(fill="x", padx=10, pady=10)
+        self.ollama_config_frame = ttk.LabelFrame(right_frame, text="⚙️ Configuration Ollama", padding=10)
 
         ttk.Label(self.ollama_config_frame, text="Hôte:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         ttk.Entry(self.ollama_config_frame, textvariable=self.ollama_host_var,
-                 width=40).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+                 width=35).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
 
         ttk.Label(self.ollama_config_frame, text="Modèle:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
 
@@ -505,44 +495,46 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
         model_frame = ttk.Frame(self.ollama_config_frame)
         model_frame.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
 
+        # Combobox - permet saisie manuelle OU sélection dans la liste
         self.ollama_model_combo = ttk.Combobox(model_frame, textvariable=self.ollama_model_var,
-                                               width=30, state="normal")
+                                               width=25)
         self.ollama_model_combo.pack(side="left", fill="x", expand=True, padx=(0, 5))
 
-        self.refresh_ollama_models_btn = ttk.Button(model_frame, text="🔄 Rafraîchir",
-                                                    command=self._refresh_ollama_models, width=12)
+        self.refresh_ollama_models_btn = ttk.Button(model_frame, text="🔄 Liste",
+                                                    command=self._refresh_ollama_models, width=8)
         self.refresh_ollama_models_btn.pack(side="left")
 
-        ttk.Label(self.ollama_config_frame, text="(Liste des modèles installés sur le serveur Ollama)",
+        ttk.Label(self.ollama_config_frame, text="Sélectionnez dans la liste ou tapez le nom du modèle",
                  font=("Arial", 8), foreground="gray").grid(row=2, column=1, sticky="w", padx=5)
 
         self.ollama_config_frame.columnconfigure(1, weight=1)
 
         # Configuration OpenAI
-        self.openai_config_frame = ttk.LabelFrame(scrollable_frame, text="⚙️ Configuration OpenAI", padding=10)
-        self.openai_config_frame.pack(fill="x", padx=10, pady=10)
+        self.openai_config_frame = ttk.LabelFrame(right_frame, text="⚙️ Configuration OpenAI", padding=10)
 
         ttk.Label(self.openai_config_frame, text="Clé API:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         ttk.Entry(self.openai_config_frame, textvariable=self.openai_api_key_var,
-                 width=40, show="*").grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+                 width=35, show="*").grid(row=0, column=1, sticky="ew", padx=5, pady=5)
 
         ttk.Label(self.openai_config_frame, text="Modèle:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
         ttk.Entry(self.openai_config_frame, textvariable=self.openai_model_var,
-                 width=40).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+                 width=35).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+
+        ttk.Label(self.openai_config_frame, text="(ex: gpt-4, gpt-4o)",
+                 font=("Arial", 8), foreground="gray").grid(row=2, column=1, sticky="w", padx=5)
 
         self.openai_config_frame.columnconfigure(1, weight=1)
 
         # Configuration Mistral
-        self.mistral_config_frame = ttk.LabelFrame(scrollable_frame, text="⚙️ Configuration Mistral AI", padding=10)
-        self.mistral_config_frame.pack(fill="x", padx=10, pady=10)
+        self.mistral_config_frame = ttk.LabelFrame(right_frame, text="⚙️ Configuration Mistral AI", padding=10)
 
         ttk.Label(self.mistral_config_frame, text="Clé API:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         ttk.Entry(self.mistral_config_frame, textvariable=self.mistral_api_key_var,
-                 width=40, show="*").grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+                 width=35, show="*").grid(row=0, column=1, sticky="ew", padx=5, pady=5)
 
         ttk.Label(self.mistral_config_frame, text="Modèle:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
         ttk.Entry(self.mistral_config_frame, textvariable=self.mistral_model_var,
-                 width=40).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+                 width=35).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
 
         ttk.Label(self.mistral_config_frame, text="(ex: mistral-large-latest)",
                  font=("Arial", 8), foreground="gray").grid(row=2, column=1, sticky="w", padx=5)
@@ -550,25 +542,24 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
         self.mistral_config_frame.columnconfigure(1, weight=1)
 
         # Configuration Anthropic
-        self.anthropic_config_frame = ttk.LabelFrame(scrollable_frame, text="⚙️ Configuration Anthropic (Claude)", padding=10)
-        self.anthropic_config_frame.pack(fill="x", padx=10, pady=10)
+        self.anthropic_config_frame = ttk.LabelFrame(right_frame, text="⚙️ Configuration Anthropic (Claude)", padding=10)
 
         ttk.Label(self.anthropic_config_frame, text="Clé API:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         ttk.Entry(self.anthropic_config_frame, textvariable=self.anthropic_api_key_var,
-                 width=40, show="*").grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+                 width=35, show="*").grid(row=0, column=1, sticky="ew", padx=5, pady=5)
 
         ttk.Label(self.anthropic_config_frame, text="Modèle:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
         ttk.Entry(self.anthropic_config_frame, textvariable=self.anthropic_model_var,
-                 width=40).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+                 width=35).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
 
         ttk.Label(self.anthropic_config_frame, text="(ex: claude-3-sonnet-20240229)",
                  font=("Arial", 8), foreground="gray").grid(row=2, column=1, sticky="w", padx=5)
 
         self.anthropic_config_frame.columnconfigure(1, weight=1)
 
-        # Bouton de test
-        test_frame = ttk.Frame(scrollable_frame)
-        test_frame.pack(fill="x", padx=10, pady=10)
+        # Bouton de test (sous les configurations)
+        test_frame = ttk.Frame(main_container)
+        test_frame.pack(fill="x", pady=(10, 0))
 
         self.test_button = ttk.Button(test_frame, text="🧪 Tester la Connexion",
                                      command=self._test_ia_connection)
@@ -578,11 +569,11 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
         self.test_result_label.pack(side="left", padx=10)
 
         # Séparateur
-        ttk.Separator(scrollable_frame, orient="horizontal").pack(fill="x", padx=10, pady=20)
+        ttk.Separator(main_container, orient="horizontal").pack(fill="x", pady=15)
 
         # Configuration DeepL (section séparée, pas un provider IA)
-        deepl_section = ttk.LabelFrame(scrollable_frame, text="🌐 DeepL - Traduction Professionnelle", padding=10)
-        deepl_section.pack(fill="x", padx=10, pady=10)
+        deepl_section = ttk.LabelFrame(main_container, text="🌐 DeepL - Traduction Professionnelle", padding=10)
+        deepl_section.pack(fill="x", pady=10)
 
         ttk.Label(deepl_section,
                  text="DeepL est un service de traduction séparé, indépendant des providers IA.",
@@ -665,15 +656,15 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
         self.mistral_config_frame.pack_forget()
         self.anthropic_config_frame.pack_forget()
 
-        # Afficher le frame correspondant
+        # Afficher le frame correspondant dans la colonne de droite
         if provider == "ollama":
-            self.ollama_config_frame.pack(fill="x", padx=10, pady=10)
+            self.ollama_config_frame.pack(fill="both", expand=True)
         elif provider == "openai":
-            self.openai_config_frame.pack(fill="x", padx=10, pady=10)
+            self.openai_config_frame.pack(fill="both", expand=True)
         elif provider == "mistral":
-            self.mistral_config_frame.pack(fill="x", padx=10, pady=10)
+            self.mistral_config_frame.pack(fill="both", expand=True)
         elif provider == "anthropic":
-            self.anthropic_config_frame.pack(fill="x", padx=10, pady=10)
+            self.anthropic_config_frame.pack(fill="both", expand=True)
 
     def _on_deepl_enabled_changed(self):
         """Active/désactive le frame de configuration DeepL"""
@@ -760,10 +751,15 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
                         model_names.insert(0, current_model)
                         self.ollama_model_combo['values'] = model_names
 
-                    messagebox.showinfo("Succès",
-                                      f"{len(model_names)} modèle(s) Ollama trouvé(s):\n" +
-                                      "\n".join(f"  • {name}" for name in model_names[:10]) +
-                                      (f"\n  ... et {len(model_names) - 10} autres" if len(model_names) > 10 else ""))
+                    # Message de succès avec les modèles trouvés
+                    if len(model_names) <= 10:
+                        model_list = "\n".join(f"  • {name}" for name in model_names)
+                        messagebox.showinfo("Modèles Ollama chargés",
+                                          f"{len(model_names)} modèle(s) trouvé(s):\n\n{model_list}")
+                    else:
+                        model_list = "\n".join(f"  • {name}" for name in model_names[:10])
+                        messagebox.showinfo("Modèles Ollama chargés",
+                                          f"{len(model_names)} modèle(s) trouvé(s):\n\n{model_list}\n\n  ... et {len(model_names) - 10} autres")
                 else:
                     messagebox.showwarning("Attention",
                                          "Aucun modèle Ollama trouvé sur le serveur.\n" +
@@ -798,7 +794,7 @@ Réponds uniquement avec la traduction améliorée, en préservant exactement to
 
         finally:
             # Réactiver le bouton
-            self.refresh_ollama_models_btn.config(state="normal", text="🔄 Rafraîchir")
+            self.refresh_ollama_models_btn.config(state="normal", text="🔄 Liste")
             self.update()
 
     def _reset_deepl_counter(self):
@@ -1049,19 +1045,20 @@ Fichier de configuration: translation_config.json
 
         ollama_config = ai_config.get("ollama", {})
         self.ollama_host_var.set(ollama_config.get("host", "http://localhost:11434"))
-        self.ollama_model_var.set(ollama_config.get("model", "aya"))
+        # Charger depuis "model" ou "default_model" (compatibilité avec settings.json)
+        self.ollama_model_var.set(ollama_config.get("model", ollama_config.get("default_model", "aya")))
 
         openai_config = ai_config.get("openai", {})
         self.openai_api_key_var.set(openai_config.get("api_key", ""))
-        self.openai_model_var.set(openai_config.get("model", "gpt-4"))
+        self.openai_model_var.set(openai_config.get("model", openai_config.get("default_model", "gpt-4")))
 
         mistral_config = ai_config.get("mistral", {})
         self.mistral_api_key_var.set(mistral_config.get("api_key", ""))
-        self.mistral_model_var.set(mistral_config.get("model", "mistral-large-latest"))
+        self.mistral_model_var.set(mistral_config.get("model", mistral_config.get("default_model", "mistral-large-latest")))
 
         anthropic_config = ai_config.get("anthropic", {})
         self.anthropic_api_key_var.set(anthropic_config.get("api_key", ""))
-        self.anthropic_model_var.set(anthropic_config.get("model", "claude-3-sonnet-20240229"))
+        self.anthropic_model_var.set(anthropic_config.get("model", anthropic_config.get("default_model", "claude-3-sonnet-20240229")))
 
         deepl_config = ai_config.get("deepl", {})
         self.deepl_enabled_var.set(deepl_config.get("enabled", False))
@@ -1204,13 +1201,19 @@ Fichier de configuration: translation_config.json
             if "ai_providers" not in settings:
                 settings["ai_providers"] = {}
 
-            # Copier les configurations
+            # Copier les configurations avec mapping des clés
             for provider in ["ollama", "openai", "mistral", "anthropic", "deepl"]:
                 if provider in ai_config:
                     if provider not in settings["ai_providers"]:
                         settings["ai_providers"][provider] = {}
 
-                    settings["ai_providers"][provider].update(ai_config[provider])
+                    # Mapper les clés correctement
+                    provider_config = ai_config[provider].copy()
+                    if "model" in provider_config:
+                        # Convertir "model" en "default_model" pour settings.json
+                        provider_config["default_model"] = provider_config.pop("model")
+
+                    settings["ai_providers"][provider].update(provider_config)
 
             # Mettre à jour le provider par défaut
             settings["ai_providers"]["default_provider"] = ai_config["provider"]
