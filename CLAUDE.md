@@ -2,6 +2,35 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ IMPORTANT: Git Branch Policy
+
+**Branch Naming Constraint**: Claude Code can only push to branches ending with the current session ID.
+
+**Development Branch**: `developpement`
+
+**Workflow**:
+1. Claude creates session branches: `claude/<description>-<sessionID>`
+2. Claude pushes all changes to the session branch
+3. User merges session branch into `developpement` using scripts
+4. User can clean up old session branches after merging
+
+**Scripts Available**:
+- `scripts/fusionne.sh` or `scripts/fusionne.ps1` - Merge session branch into development
+- `scripts/nettoyer-branches.sh` or `scripts/nettoyer-branches.ps1` - Clean up old branches
+
+**Usage**:
+```bash
+# Ubuntu/Linux - Merge Claude's work (preserves current branch)
+./scripts/fusionne.sh claude/fix-safe-directory-warning-01MdoVv6j7to7ph4yW1cw7wf
+
+# PowerShell - Merge Claude's work
+.\scripts\fusionne.ps1 claude/fix-safe-directory-warning-01MdoVv6j7to7ph4yW1cw7wf
+
+# Clean up old branches
+./scripts/nettoyer-branches.sh
+.\scripts\nettoyer-branches.ps1
+```
+
 ## Application Overview
 
 OllamaTrad is a Python application for intelligent processing of JSON files using multiple AI providers (Ollama, OpenAI, Mistral, Anthropic). It provides both CLI and GUI interfaces for tasks like translation, content processing, metadata management, and direct AI dialogue with a file system-like navigation approach for JSON structures.
