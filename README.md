@@ -1,6 +1,14 @@
 # OllamaTrad
 
+**Remarque** : actuellement en test avec Claude code web, et ses multiples branches de production, le projet n'est pas en l'état complètement fonctionnel sur main. Il y a deux branches principales : main, pour les releases "public", et developpement qui est la up-todate du developpement.
+
 **OllamaTrad** est une application Python de traduction intelligente utilisant plusieurs fournisseurs d'IA (Ollama, OpenAI, Mistral, Anthropic, DeepL). Elle permet de traduire et gérer des fichiers JSON complexes avec un format spécial `.got.json` qui conserve l'original, les traductions, l'historique et l'état de validation.
+
+En d'autres termes, chaque fichier que vous ouvrez (autre que `.got.json`), créer ce fichier qui contient le maximum d'informations pour vous aidez à traduire : les différentes langues que vous avez choisi pour chaque entrée, leurs historiques (normalement, à chaque changement d'une traduction que vous faîtes, il sauvegarde la dernière valeur, et l'ajoute à l'historique, permettant de revenir). Il est important de noter que le fichier `.got.json` doit être au même endroit que celui que vous ouvrez, on ne change rien a votre fichier initial.
+
+Vous pouvez définir les langues que vous voulez traduire, et un sous ensemble que vous souhaitez voir, pour alleger les traitements. 
+
+Enfin n'oubliez pas d'exporter : vu comment fonctionne le système Babele de Foundryvtt : un fichier par langue (Menu Fichier->Exporter JSON->FR par exemple). Toutes les chaines de traduction remplace les chaines originales, si vous le souhaitez seule les chaines validées peuvent être selectionnées (dans le formulaire d'export)
 
 ## 🌟 Fonctionnalités principales
 
@@ -171,6 +179,13 @@ ollamaTrad/
 ```
 
 ## 🆘 Aide et dépannage
+
+### Problème Git : "warning: safe.directory 'undefined' not absolute"
+Si vous rencontrez cette erreur lors de l'utilisation de git, exécutez :
+```bash
+git config --global --add safe.directory /chemin/absolu/vers/ollamaTrad
+```
+Remplacez `/chemin/absolu/vers/ollamaTrad` par le chemin complet du projet sur votre machine.
 
 ### L'IA ne répond pas
 - **Ollama** : Vérifiez qu'Ollama est lancé (`ollama serve`)
