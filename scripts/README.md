@@ -102,7 +102,7 @@ nettoyer
 
 ## ⚠️ Notes importantes
 
-- La branche de développement est : `claude/developpement-0157HNsrYJv3uYsHdcEi2fuL`
+- La branche de développement est : `developpement`
 - Les scripts préservent toujours votre branche actuelle
 - Les suppressions de branches distantes nécessitent les droits appropriés
 - En cas de conflit lors de la fusion, le script s'arrête pour vous laisser résoudre manuellement
@@ -160,5 +160,5 @@ Si un conflit survient :
 1. Le script s'arrête automatiquement
 2. Résolvez les conflits manuellement
 3. Commitez les résolutions : `git commit`
-4. Poussez : `git push origin claude/developpement-0157HNsrYJv3uYsHdcEi2fuL`
+4. Poussez : `git push origin developpement`
 5. Retournez à votre branche : `git checkout <votre-branche>`

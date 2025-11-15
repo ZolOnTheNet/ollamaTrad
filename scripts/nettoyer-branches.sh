@@ -4,7 +4,7 @@
 
 set -e
 
-BRANCH_DEV="claude/developpement-0157HNsrYJv3uYsHdcEi2fuL"
+BRANCH_DEV="developpement"
 
 echo "🧹 Nettoyage des branches Claude fusionnées"
 echo ""

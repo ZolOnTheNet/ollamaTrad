@@ -3,7 +3,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$BRANCH_DEV = "claude/developpement-0157HNsrYJv3uYsHdcEi2fuL"
+$BRANCH_DEV = "developpement"
 
 Write-Host "🧹 Nettoyage des branches Claude fusionnées" -ForegroundColor Cyan
 Write-Host ""

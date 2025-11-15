@@ -6,12 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Branch Naming Constraint**: Claude Code can only push to branches ending with the current session ID.
 
-**Development Branch**: `claude/developpement-0157HNsrYJv3uYsHdcEi2fuL`
+**Development Branch**: `developpement`
 
 **Workflow**:
 1. Claude creates session branches: `claude/<description>-<sessionID>`
 2. Claude pushes all changes to the session branch
-3. User merges session branch into `claude/developpement-0157HNsrYJv3uYsHdcEi2fuL` using scripts
+3. User merges session branch into `developpement` using scripts
 4. User can clean up old session branches after merging
 
 **Scripts Available**:

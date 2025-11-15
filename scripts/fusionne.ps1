@@ -8,7 +8,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$BRANCH_DEV = "claude/developpement-0157HNsrYJv3uYsHdcEi2fuL"
+$BRANCH_DEV = "developpement"
 
 Write-Host "🔄 Fusion de $BrancheClaude dans $BRANCH_DEV" -ForegroundColor Cyan
 Write-Host ""
