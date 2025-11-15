@@ -32,6 +32,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from core.got_json_manager import GotJsonManager
 from core.ai_client import AIClient
+from core.command_handler import CommandHandler
 from utils.file_loader import load_file_intelligently
 from gui.translation_form import TranslationForm
 from gui.batch_translation_form import BatchTranslationForm
@@ -51,6 +52,10 @@ class OllamaTradGUI:
         self.got_manager: Optional[GotJsonManager] = None
         self.ai_client = AIClient()
         self.current_file_path: Optional[str] = None
+
+        # Gestionnaire de commandes unifié (CLI + GUI)
+        self.command_handler = CommandHandler()
+        self._register_command_callbacks()
 
         # Configuration des traductions
         self.translation_config = self._load_translation_config()
@@ -300,6 +305,38 @@ class OllamaTradGUI:
         # Mettre à jour le compteur toutes les 2 secondes
         self._update_character_count()
 
+    def _register_command_callbacks(self):
+        """Enregistre les callbacks pour synchroniser CommandHandler avec l'interface GUI."""
+        # Callback appelé quand le chemin change (cd)
+        def on_path_changed(path: str):
+            # Sélectionner le chemin dans le TreeView
+            self._select_path_in_tree(path)
+
+        # Callback pour afficher du texte dans le chat
+        def on_output(message: str):
+            self.chat_panel.add_message("system", message)
+
+        # Callback pour afficher une erreur dans le chat
+        def on_error(message: str):
+            self.chat_panel.add_message("error", message)
+
+        # Callback quand un fichier est chargé
+        def on_file_loaded(file_path: str, got_manager: GotJsonManager):
+            self.got_manager = got_manager
+            self.current_file_path = file_path
+            self._populate_tree()
+
+        # Callback quand les données changent
+        def on_data_changed():
+            self._populate_tree()
+
+        # Enregistrer tous les callbacks
+        self.command_handler.register_callback("on_path_changed", on_path_changed)
+        self.command_handler.register_callback("on_output", on_output)
+        self.command_handler.register_callback("on_error", on_error)
+        self.command_handler.register_callback("on_file_loaded", on_file_loaded)
+        self.command_handler.register_callback("on_data_changed", on_data_changed)
+
     def _load_translation_config(self) -> Dict:
         """Charge la configuration des traductions"""
         config_path = Path(__file__).parent.parent / "config" / "translation_config.json"
@@ -414,6 +451,11 @@ class OllamaTradGUI:
             # Utiliser le chargement intelligent
             self.got_manager, got_path = load_file_intelligently(filepath)
             self.current_file_path = got_path
+
+            # Synchroniser avec le CommandHandler
+            self.command_handler.got_manager = self.got_manager
+            self.command_handler.current_file_path = got_path
+            self.command_handler.current_path = ""  # Reset à la racine
 
             # Appliquer les langues configurées par l'utilisateur
             self.got_manager.target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
@@ -1720,35 +1762,97 @@ class OllamaTradGUI:
         """
         Gère les messages utilisateur dans le chat.
 
-        Supporte les commandes console avec "/" :
-        - /cd <path> : Change le chemin actuel et sélectionne dans l'arbre
-        - /ia <message> : Dialogue avec l'IA (commande par défaut)
-        - /set, /show, /load, etc. : Commandes internes du provider
+        Utilise le CommandHandler unifié pour exécuter les mêmes commandes que CLI.
+
+        Commandes supportées :
+        - /cd <path> : Naviguer dans l'arbre
+        - /ls [path] : Lister le contenu
+        - /cat <path> : Afficher un élément
+        - /load <file> : Charger un fichier
+        - /save [file] : Sauvegarder
+        - /provider <action> [name] : Gérer les providers
+        - /ia <message> : Dialoguer avec l'IA
+        - /show, /set, etc. : Commandes internes du provider
 
         Si pas de "/" au début, traite comme "/ia <message>"
 
         Args:
             message: Message de l'utilisateur
         """
-        # Détecter les commandes (commencent par "/")
+        # Synchroniser le got_manager avec le command_handler
+        if self.got_manager and not self.command_handler.got_manager:
+            self.command_handler.got_manager = self.got_manager
+            self.command_handler.json_manager = getattr(self, 'json_manager', None)
+            self.command_handler.current_file_path = self.current_file_path
+
+        # Afficher le message utilisateur
+        self.chat_panel.add_message("user", message)
+
+        # Déterminer si c'est une commande
         if message.startswith("/"):
             # Parser la commande
-            parts = message.split(None, 1)  # Séparer au premier espace
-            command = parts[0][1:].lower()  # Enlever le "/" et mettre en minuscules
+            parts = message.split(None, 1)
+            command = parts[0][1:].lower()  # Enlever le "/"
             args = parts[1] if len(parts) > 1 else ""
 
-            # Router vers le bon handler
-            if command == "cd":
-                self._handle_cd_command(args)
-            elif command == "ia":
-                # Dialogue avec l'IA
-                self._handle_ia_command(args)
-            else:
-                # Commande interne du provider (/set, /show, /load, /clear, etc.)
-                self._handle_internal_command(message)
+            # Router vers le CommandHandler
+            self._execute_command(command, args, full_message=message)
         else:
-            # Pas de "/" : traiter comme "/ia <message>"
-            self._handle_ia_command(message)
+            # Pas de "/" : traiter comme "ia"
+            self._execute_command("ia", message)
+
+    def _execute_command(self, command: str, args: str, full_message: str = ""):
+        """
+        Exécute une commande via le CommandHandler.
+
+        Args:
+            command: Nom de la commande (cd, ls, ia, etc.)
+            args: Arguments de la commande
+            full_message: Message complet (pour commandes internes)
+        """
+        def run_async_command():
+            try:
+                # Créer une boucle d'événements pour les commandes async
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # Router vers la bonne méthode
+                if command == "cd":
+                    self.command_handler.cmd_cd(args)
+                elif command == "ls":
+                    self.command_handler.cmd_ls(args)
+                elif command == "cat":
+                    self.command_handler.cmd_cat(args)
+                elif command == "load":
+                    self.command_handler.cmd_load(args)
+                elif command == "save":
+                    self.command_handler.cmd_save(args if args else None)
+                elif command == "provider":
+                    parts = args.split(None, 1)
+                    action = parts[0] if parts else "info"
+                    provider_name = parts[1] if len(parts) > 1 else ""
+                    self.command_handler.cmd_provider(action, provider_name)
+                elif command == "ia":
+                    # Commande async
+                    loop.run_until_complete(self.command_handler.cmd_ia(args))
+                elif command in ["show", "set", "load", "clear", "save", "bye", "help"]:
+                    # Commandes internes du provider (async)
+                    loop.run_until_complete(self.command_handler.cmd_internal(full_message))
+                else:
+                    # Commande inconnue
+                    self.chat_panel.add_message("error", f"Commande inconnue: {command}")
+                    self.chat_panel.add_message("system", "Tapez '/help' pour voir les commandes disponibles")
+
+                loop.close()
+
+            except Exception as e:
+                import traceback
+                error_msg = f"Erreur lors de l'exécution de la commande: {e}\n{traceback.format_exc()}"
+                self.chat_panel.add_message("error", error_msg)
+
+        # Exécuter dans un thread séparé pour ne pas bloquer l'interface
+        thread = threading.Thread(target=run_async_command, daemon=True)
+        thread.start()
 
     def _select_path_in_tree(self, path: str) -> bool:
         """
