@@ -394,16 +394,25 @@ class OllamaTradGUI:
             filepath: Chemin vers le fichier à charger
         """
         try:
-            self.status_label.config(text="Chargement en cours...")
+            # Étape 1: Lecture du fichier (0-30%)
+            self.status_label.config(text="[  0%] Lecture du fichier...")
             self.root.update()
 
             # Utiliser le chargement intelligent
             self.got_manager, got_path = load_file_intelligently(filepath)
             self.current_file_path = got_path
 
+            # Étape 2: Configuration (30-40%)
+            self.status_label.config(text="[ 30%] Configuration des langues...")
+            self.root.update()
+
             # Appliquer les langues configurées par l'utilisateur
             self.got_manager.target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
             self.translation_form.visible_languages = self.translation_config.get("visible_languages", [])
+
+            # Étape 3: Mise à jour des formulaires (40-50%)
+            self.status_label.config(text="[ 40%] Mise à jour des formulaires...")
+            self.root.update()
 
             # Mettre à jour le formulaire
             self.translation_form.set_got_manager(self.got_manager)
@@ -412,13 +421,20 @@ class OllamaTradGUI:
             self.batch_form.set_got_manager(self.got_manager)
             self.batch_form.set_translation_config(self.translation_config)
 
+            # Étape 4: Construction de l'arbre (50-100%)
+            self.status_label.config(text="[ 50%] Construction de l'arbre...")
+            self.root.update()
+
             # Charger l'arbre
             self._populate_tree()
+
+            # Étape 5: Finalisation (100%)
+            self.status_label.config(text="[100%] Finalisation...")
+            self.root.update()
 
             # Mettre à jour la barre de statut
             filename = Path(got_path).name
             self.file_label.config(text=filename)
-            self.status_label.config(text=f"✓ Fichier chargé: {filename}")
 
             # Marquer comme non modifié (fichier vient d'être chargé)
             self._mark_as_saved()
@@ -430,6 +446,9 @@ class OllamaTradGUI:
 
             # Mettre à jour le menu Export
             self._update_export_menu()
+
+            # Message de succès
+            self.status_label.config(text=f"✓ Fichier chargé: {filename}")
 
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible de charger le fichier:\n{e}")
@@ -1231,6 +1250,11 @@ class OllamaTradGUI:
                 # Vérifier si l'utilisateur a demandé l'arrêt
                 if self.batch_form.is_stopped():
                     self.root.after(0, lambda: self.batch_form.finish_processing(success=False))
+                    # Mettre à jour l'arbre même après interruption
+                    self.root.after(0, self._populate_tree)
+                    # Resélectionner la branche après le rafraîchissement
+                    if branch_path:
+                        self.root.after(100, lambda: self._select_path_in_tree(branch_path))
                     return
 
                 # Mettre à jour la progression (dans le thread principal)
@@ -1627,6 +1651,11 @@ class OllamaTradGUI:
                 # Vérifier si l'utilisateur a demandé l'arrêt
                 if self.batch_form.is_stopped():
                     self.root.after(0, lambda: self.batch_form.finish_processing(success=False))
+                    # Mettre à jour l'arbre même après interruption
+                    self.root.after(0, self._populate_tree)
+                    # Resélectionner la branche après le rafraîchissement
+                    if branch_path:
+                        self.root.after(100, lambda: self._select_path_in_tree(branch_path))
                     return
 
                 # Mettre à jour la progression (dans le thread principal)
