@@ -13,18 +13,39 @@ from core.metadata import MetadataManager
 from core.ai_client import AIClient
 from core.operation_history import OperationHistoryManager
 from core.got_json_manager import GotJsonManager
+from core.command_handler import CommandHandler
 from utils.file_loader import load_file_intelligently
+import asyncio
 
 class CLIInterface:
     def __init__(self):
+        # Utiliser le CommandHandler centralisé
+        self.command_handler = CommandHandler()
+
+        # Rétrocompatibilité : exposer les attributs pour l'ancien code
         self.json_manager: Optional[JsonManager] = None
-        self.got_manager: Optional[GotJsonManager] = None  # Nouveau gestionnaire .got.json
+        self.got_manager: Optional[GotJsonManager] = None
         self.ollama_client = OllamaClient()
         self.metadata_manager = MetadataManager()
-        self.ai_client = AIClient()
-        self.history_manager = OperationHistoryManager()
+        self.ai_client = self.command_handler.ai_client
+        self.history_manager = self.command_handler.history_manager
         self.current_session: Optional[str] = None
-        self.current_path: str = ""  # Chemin courant dans le JSON
+
+        # Pas besoin de current_path ici, on utilise command_handler.current_path
+
+        # Enregistrer les callbacks CLI (print au lieu de GUI)
+        self.command_handler.register_callback("on_output", lambda msg: print(msg))
+        self.command_handler.register_callback("on_error", lambda msg: print(f"❌ {msg}"))
+        self.command_handler.register_callback("on_path_changed", self._on_path_changed_cli)
+
+    def _on_path_changed_cli(self, path: str):
+        """Callback appelé quand le chemin change (pour afficher le prompt)."""
+        # Rien à faire en CLI, le prompt sera mis à jour automatiquement
+
+    @property
+    def current_path(self) -> str:
+        """Retourne le chemin courant depuis le CommandHandler."""
+        return self.command_handler.current_path
 
     def get_preferred_model(self) -> str:
         """Retourne le modèle préféré avec aya en priorité"""
@@ -35,63 +56,46 @@ class CLIInterface:
 
     def _sync_current_path(self) -> None:
         """Synchronise le current_path entre CLI et JsonManager"""
-        if self.json_manager:
-            # Synchroniser du JsonManager vers CLI
-            self.current_path = self.json_manager.get_current_path()
+        # Plus nécessaire avec CommandHandler
 
     def cmd_load(self, file_path: str) -> None:
         """Charge un fichier JSON ou .got.json avec gestion intelligente"""
-        try:
-            # Utiliser le nouveau système de chargement intelligent
-            self.got_manager, got_path = load_file_intelligently(file_path)
+        # Utiliser le CommandHandler
+        self.command_handler.cmd_load(file_path)
 
-            # Créer un JsonManager à partir des données du GotJsonManager
-            # pour maintenir la compatibilité avec le reste du code
-            self.json_manager = JsonManager()
-            self.json_manager.data = self.got_manager.data
-            self.json_manager.file_path = Path(got_path)
-            self.json_manager.original_data = self.got_manager.data.copy()
+        # Synchroniser les références pour rétrocompatibilité
+        self.got_manager = self.command_handler.got_manager
+        self.json_manager = self.command_handler.json_manager
 
-            # Configurer le hook d'historique
-            def operation_hook(operation_type: str, affected_data: dict, user_input: dict = None, result: any = None):
-                self.history_manager.record_operation(
-                    operation_type=operation_type,
-                    user_input=user_input or {},
-                    affected_data=affected_data,
-                    result=result,
-                    provider_info=self.ai_client.get_current_provider_info()
-                )
+        # Afficher les stats détaillées (que CommandHandler ne fait pas)
+        if self.got_manager and self.got_manager.is_valid_got_json(self.got_manager.data):
+            header = self.got_manager.data.get("__ollamafic__", {})
+            if header:
+                print(f"📦 Format: .got.json v{header.get('version', 'unknown')}")
+                print(f"📄 Fichier source: {header.get('original_file', 'unknown')}")
+                print(f"🕒 Dernière modification: {header.get('last_modified', 'unknown')}")
 
-            self.json_manager.set_operation_hook(operation_hook)
-            print(f"✓ Fichier chargé: {got_path}")
+            # Afficher les statistiques de traduction
+            stats_trans = self.got_manager.get_translation_stats()
+            print(f"\n📊 Statistiques de traduction:")
+            print(f"  - Entrées traduisibles: {stats_trans['total_entries']}")
 
-            # Afficher les informations sur le .got.json
-            if self.got_manager.is_valid_got_json(self.got_manager.data):
-                header = self.got_manager.data["__ollamafic__"]
-                print(f"📦 Format: .got.json v{header['version']}")
-                print(f"📄 Fichier source: {header['original_file']}")
-                print(f"🕒 Dernière modification: {header['last_modified']}")
+            for lang in self.got_manager.target_languages:
+                lang_stats = stats_trans['by_language'][lang]
+                print(f"  - {lang.upper()}: {lang_stats['translated']}/{stats_trans['total_entries']} " +
+                      f"({lang_stats['percentage']:.1f}%) traduites, " +
+                      f"{lang_stats['validated']} validées")
 
-                # Afficher les statistiques de traduction
-                stats_trans = self.got_manager.get_translation_stats()
-                print(f"\n📊 Statistiques de traduction:")
-                print(f"  - Entrées traduisibles: {stats_trans['total_entries']}")
+            # Afficher les états de validation
+            val_stats = stats_trans['validation_states']
+            print(f"\n🎨 États de validation:")
+            print(f"  - ✅ Toutes validées (vert): {val_stats['green']}")
+            print(f"  - 🟠 Partiellement (orange): {val_stats['orange']}")
+            print(f"  - ❌ Non validées (rouge): {val_stats['red']}")
+            print(f"  - ⚪ Pas de traduction: {val_stats['none']}")
 
-                for lang in self.got_manager.target_languages:
-                    lang_stats = stats_trans['by_language'][lang]
-                    print(f"  - {lang.upper()}: {lang_stats['translated']}/{stats_trans['total_entries']} " +
-                          f"({lang_stats['percentage']:.1f}%) traduites, " +
-                          f"{lang_stats['validated']} validées")
-
-                # Afficher les états de validation
-                val_stats = stats_trans['validation_states']
-                print(f"\n🎨 États de validation:")
-                print(f"  - ✅ Toutes validées (vert): {val_stats['green']}")
-                print(f"  - 🟠 Partiellement (orange): {val_stats['orange']}")
-                print(f"  - ❌ Non validées (rouge): {val_stats['red']}")
-                print(f"  - ⚪ Pas de traduction: {val_stats['none']}")
-
-            # Afficher les statistiques JSON
+        # Afficher les statistiques JSON
+        if self.json_manager:
             stats = self.json_manager.get_stats()
             print(f"\n📊 Statistiques JSON:")
             print(f"  - Dictionnaires: {stats['dicts']}")
@@ -117,49 +121,11 @@ class CLIInterface:
 
     def cmd_ls(self, path: str = "") -> None:
         """Liste le contenu d'un chemin JSON"""
-        if not self.json_manager:
-            print("❌ Aucun fichier chargé. Utilisez 'load <fichier>' d'abord.")
-            return
-
-        try:
-            # Si aucun chemin spécifié, utiliser le répertoire courant
-            if not path:
-                path = self.json_manager.get_current_path()
-            else:
-                # Résoudre le chemin par rapport au répertoire courant
-                path = self.json_manager._resolve_path(path)
-
-            contents = self.json_manager.list_contents(path)
-            display_path = f"/{path}" if path else "/"
-
-            if not contents:
-                print(f"📂 Chemin vide: {display_path}")
-                return
-
-            print(f"📂 Contenu de {display_path}:")
-            for item in contents:
-                type_icon = {'dict': '📁', 'list': '📋', 'value': '📄'}
-                icon = type_icon.get(item['type'], '❓')
-                print(f"  {icon} {item['name']:<20} ({item['type']:<5}) [{item['size']}] {item['preview']}")
-
-        except Exception as e:
-            print(f"❌ Erreur: {e}")
+        self.command_handler.cmd_ls(path)
 
     def cmd_cat(self, path: str) -> None:
         """Affiche le contenu d'un chemin JSON"""
-        if not self.json_manager:
-            print("❌ Aucun fichier chargé.")
-            return
-
-        try:
-            # Résoudre le chemin par rapport au répertoire courant
-            resolved_path = self.json_manager._resolve_path(path)
-            value = self.json_manager.get_value(resolved_path)
-            display_path = f"/{resolved_path}" if resolved_path else "/"
-            print(f"📄 Contenu de {display_path}:")
-            print(json.dumps(value, indent=2, ensure_ascii=False))
-        except Exception as e:
-            print(f"❌ Erreur: {e}")
+        self.command_handler.cmd_cat(path)
 
     def cmd_search(self, pattern: str, keys: bool = True, values: bool = True) -> None:
         """Recherche dans le JSON"""
@@ -186,6 +152,10 @@ class CLIInterface:
 
     def cmd_cd(self, path: str = None) -> None:
         """Change ou affiche le chemin courant"""
+        self.command_handler.cmd_cd(path)
+
+    def cmd_cd_old(self, path: str = None) -> None:
+        """Ancien code cd (conservé pour référence)"""
         if not self.json_manager:
             print("❌ Aucun fichier chargé.")
             return
@@ -465,6 +435,10 @@ class CLIInterface:
 
     def cmd_save(self, file_path: Optional[str] = None) -> None:
         """Sauvegarde le fichier JSON"""
+        self.command_handler.cmd_save(file_path)
+
+    def cmd_save_old(self, file_path: Optional[str] = None) -> None:
+        """Ancien code save (conservé pour référence)"""
         if not self.json_manager:
             print("❌ Aucun fichier chargé.")
             return
@@ -550,6 +524,11 @@ class CLIInterface:
 
     def cmd_ia(self, message: str) -> None:
         """Dialogue direct avec l'IA"""
+        # Utiliser asyncio pour exécuter la commande async
+        asyncio.run(self.command_handler.cmd_ia(message))
+
+    def cmd_ia_old(self, message: str) -> None:
+        """Ancien code ia (conservé pour référence)"""
         if not message.strip():
             print("❌ Veuillez fournir un message pour l'IA")
             return
@@ -592,7 +571,11 @@ class CLIInterface:
             print(f"❌ Erreur lors du dialogue avec l'IA: {e}")
 
     def cmd_provider(self, action: str, provider_name: str = "") -> None:
-        """Gère les providers IA (list/set)"""
+        """Gère les providers IA (list/set/info)"""
+        self.command_handler.cmd_provider(action, provider_name)
+
+    def cmd_provider_old(self, action: str, provider_name: str = "") -> None:
+        """Ancien code provider (conservé pour référence)"""
         try:
             if action == "list":
                 current = self.ai_client.get_current_provider_name()
@@ -966,9 +949,9 @@ class CLIInterface:
         while True:
             try:
                 # Construire le prompt avec le répertoire courant
-                if self.json_manager:
-                    current_display = self.json_manager.get_current_path_display()
-                    prompt = f"📝 {current_display} > "
+                # Utiliser le prompt du CommandHandler
+                if self.command_handler.got_manager:
+                    prompt = f"📝 {self.command_handler.get_prompt()}"
                 else:
                     prompt = "📝 > "
 
