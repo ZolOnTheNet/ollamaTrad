@@ -276,37 +276,18 @@ class OllamaProvider(AIProvider):
         super().__init__(config)
         self.host = config.get("host", "http://localhost:11434")
 
-        # Utiliser aya comme modèle par défaut avec fallback intelligent
-        default_model = config.get("default_model", "aya")
-        self.model = default_model
+        # Chercher "model" puis "default_model" pour compatibilité
+        self.model = config.get("model", config.get("default_model", "aya:8b"))
+        self.current_model = self.model  # Synchroniser avec parent
         self.timeout = config.get("timeout", 120)  # Augmenté à 120s pour textes longs
 
     def check_connection(self) -> bool:
-        """Vérifie la connexion à Ollama et met à jour le modèle préféré"""
+        """Vérifie la connexion à Ollama"""
         try:
             response = requests.get(f"{self.host}/api/tags", timeout=5)
-            if response.status_code == 200:
-                # Mettre à jour le modèle avec la logique de préférence
-                self._update_preferred_model()
-                return True
-            return False
+            return response.status_code == 200
         except:
             return False
-
-    def _update_preferred_model(self) -> None:
-        """Met à jour le modèle avec la logique de préférence pour aya"""
-        try:
-            # Importer ici pour éviter l'import circulaire
-            from core.ollama_client import OllamaClient
-            ollama_client = OllamaClient()
-            preferred_model = ollama_client.get_preferred_default_model()
-
-            # Mettre à jour le modèle seulement si c'est différent
-            if preferred_model != self.model:
-                self.model = preferred_model
-        except Exception:
-            # En cas d'erreur, garder le modèle actuel
-            pass
 
     async def chat(self, message: str, system_prompt: Optional[str] = None, timeout: Optional[int] = None) -> str:
         """
@@ -527,7 +508,8 @@ class OpenAIProvider(AIProvider):
         super().__init__(config)
         self.api_url = config.get("api_url", "https://api.openai.com/v1/chat/completions")
         self.api_key = config.get("api_key", "")
-        self.model = config.get("default_model", "gpt-4")
+        self.model = config.get("model", config.get("default_model", "gpt-4"))
+        self.current_model = self.model  # Synchroniser avec parent
         self.timeout = config.get("timeout", 30)
 
     def check_connection(self) -> bool:
@@ -704,7 +686,8 @@ class MistralProvider(AIProvider):
         super().__init__(config)
         self.api_url = config.get("api_url", "https://api.mistral.ai/v1/chat/completions")
         self.api_key = config.get("api_key", "")
-        self.model = config.get("default_model", "mistral-large-latest")
+        self.model = config.get("model", config.get("default_model", "mistral-large-latest"))
+        self.current_model = self.model  # Synchroniser avec parent
         self.timeout = config.get("timeout", 30)
 
     def check_connection(self) -> bool:
@@ -792,7 +775,8 @@ class AnthropicProvider(AIProvider):
         super().__init__(config)
         self.api_url = config.get("api_url", "https://api.anthropic.com/v1/messages")
         self.api_key = config.get("api_key", "")
-        self.model = config.get("default_model", "claude-3-sonnet-20240229")
+        self.model = config.get("model", config.get("default_model", "claude-3-sonnet-20240229"))
+        self.current_model = self.model  # Synchroniser avec parent
         self.timeout = config.get("timeout", 30)
 
     def check_connection(self) -> bool:
