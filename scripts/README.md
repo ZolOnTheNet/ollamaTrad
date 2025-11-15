@@ -116,22 +116,34 @@ nettoyer
 Impossible de charger le fichier ... n'est pas signé numériquement. Vous ne pouvez pas exécuter ce script sur le système actuel.
 ```
 
-**Solution 1 - RECOMMANDÉE (permanent)** :
+**Solution 1 - RECOMMANDÉE (débloquer les scripts + politique)** :
 ```powershell
+# Débloquer les scripts (une seule fois)
+Unblock-File -Path .\scripts\*.ps1
+
+# Autoriser l'exécution de scripts (permanent)
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-Puis exécutez normalement :
-```powershell
+
+# Puis exécutez normalement
 .\scripts\fusionne.ps1 claude/fix-safe-directory-warning-01MdoVv6j7to7ph4yW1cw7wf
 ```
 
-**Solution 2 - Temporaire (juste cette session)** :
+**Solution 2 - RAPIDE (politique Bypass permanent)** :
+```powershell
+# Bypass complet (pas de vérification de signature)
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope CurrentUser
+
+# Puis exécutez
+.\scripts\fusionne.ps1 claude/fix-safe-directory-warning-01MdoVv6j7to7ph4yW1cw7wf
+```
+
+**Solution 3 - Temporaire (juste cette session)** :
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 .\scripts\fusionne.ps1 claude/fix-safe-directory-warning-01MdoVv6j7to7ph4yW1cw7wf
 ```
 
-**Solution 3 - Exécution unique** :
+**Solution 4 - Exécution unique** :
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\fusionne.ps1 claude/fix-safe-directory-warning-01MdoVv6j7to7ph4yW1cw7wf
 ```
