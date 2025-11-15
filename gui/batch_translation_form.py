@@ -305,8 +305,19 @@ class BatchTranslationForm(ttk.Frame):
 
     def _on_stop_clicked(self):
         """Appelé lors du clic sur le bouton Stop."""
-        self.is_processing = False
-        # Le traitement doit vérifier is_processing périodiquement
+        from tkinter import messagebox
+
+        # Demander confirmation avant d'arrêter le traitement
+        response = messagebox.askyesno(
+            "Arrêter le traitement",
+            "Voulez-vous vraiment arrêter le traitement en cours?\n\n"
+            "Les modifications déjà effectuées seront conservées.",
+            icon='warning'
+        )
+
+        if response:
+            self.is_processing = False
+            # Le traitement doit vérifier is_processing périodiquement
 
     def _show_progress(self):
         """Affiche la zone de progression et cache la configuration."""
