@@ -172,41 +172,56 @@ class TranslationTab(ttk.Frame):
         """
         Calcule le nombre total de caractères pour les chemins sélectionnés.
 
-        Si une langue est spécifiée, exclut les champs déjà validés pour cette langue.
+        Utilise le même filtre que le field_selector (champs vides ou champs non validés).
 
         Args:
             paths: Liste des chemins des entrées
-            lang: Code langue (ex: "fr") pour exclure les champs validés. Si None, compte tous les champs.
+            lang: Code langue (ex: "fr") pour filtrer selon l'option choisie
 
         Returns:
-            Nombre total de caractères (excluant les champs validés si lang spécifié)
+            Nombre total de caractères selon le filtre actif
         """
         if not self.got_manager or not paths:
             return 0
+
+        # Récupérer le mode de filtrage du field_selector
+        filter_mode = self.field_selector.filter_mode.get()
 
         total_chars = 0
         for path in paths:
             try:
                 entry = self.got_manager._get_entry_by_path(path)
                 if isinstance(entry, dict) and "ori" in entry:
-                    # Si une langue est spécifiée, vérifier si le champ est validé ou a déjà une traduction
+                    # Appliquer le même filtrage que field_selector
+                    should_count = False
+
                     if lang and lang in entry:
                         lang_data = entry[lang]
                         if isinstance(lang_data, dict):
                             is_validated = lang_data.get("valid", False)
                             translation_text = lang_data.get("text", "")
 
-                            # Exclure si validé OU si traduction non vide (comportement du batch)
-                            if is_validated or (translation_text and translation_text.strip()):
-                                continue  # Ne pas compter ce champ
-                        elif isinstance(lang_data, str) and lang_data.strip():
-                            # Ancien format avec traduction déjà présente
-                            continue  # Ne pas compter ce champ
+                            if filter_mode == "non_validated":
+                                # Compter si non validé (même si traduction présente)
+                                should_count = not is_validated
+                            elif filter_mode == "empty":
+                                # Compter seulement si complètement vide
+                                should_count = not translation_text.strip()
+                        elif isinstance(lang_data, str):
+                            # Ancien format
+                            if filter_mode == "non_validated":
+                                should_count = True  # Format ancien = non validé
+                            elif filter_mode == "empty":
+                                should_count = not lang_data.strip()
+                    else:
+                        # Champ n'existe pas pour cette langue
+                        should_count = True  # Toujours compter les champs vides
 
-                    # Compter les caractères du texte original
-                    original_text = entry["ori"]
-                    if original_text:
-                        total_chars += len(original_text)
+                    # Compter les caractères du texte original si le champ doit être compté
+                    if should_count:
+                        original_text = entry["ori"]
+                        if original_text:
+                            total_chars += len(original_text)
             except:
                 pass
 
