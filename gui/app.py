@@ -455,7 +455,7 @@ class OllamaTradGUI:
                 self.root.update()
 
             # Faire la fusion
-            merged_data = temp_manager.evolve_got_json(
+            merged_data, stats = temp_manager.evolve_got_json(
                 source_data,
                 target_data,
                 original_filename,
@@ -465,12 +465,20 @@ class OllamaTradGUI:
             # Sauvegarder le résultat
             temp_manager.save_to_file(output_file)
 
-            # Afficher un message de succès
-            messagebox.showinfo(
-                "Fusion réussie",
-                f"Les fichiers ont été fusionnés avec succès !\n\n"
+            # Préparer le rapport de fusion
+            report = (
+                f"Fusion terminée avec succès !\n\n"
+                f"📊 Statistiques:\n"
+                f"  • Total d'entrées: {stats['total_entries']}\n"
+                f"  • Traductions récupérées: {stats['recovered']} entrées ({stats['translations_recovered']} traductions)\n"
+                f"  • Nouvelles entrées: {stats['new_entries']}\n"
+                f"  • Entrées dévalidées: {stats['invalidated']}\n"
+                f"  • Entrées perdues: {stats['lost_entries']}\n\n"
                 f"Résultat sauvegardé dans:\n{output_file}"
             )
+
+            # Afficher le rapport
+            messagebox.showinfo("Fusion réussie", report)
 
             self.chat_panel.add_message(
                 "system",

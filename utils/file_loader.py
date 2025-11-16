@@ -404,8 +404,9 @@ def load_file_with_evolution_check(filepath: str, parent_window=None, target_lan
 
             elif choice == "evolution":
                 # Faire évoluer le .got.json
-                got_manager.evolve_got_json(got_data, data, json_filename, progress_callback)
+                _, stats = got_manager.evolve_got_json(got_data, data, json_filename, progress_callback)
                 got_manager.save_to_file(str(got_path))
+                # TODO: Afficher les statistiques quelque part
                 return got_manager, str(got_path)
 
             elif choice == "ancien":

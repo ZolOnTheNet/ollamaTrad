@@ -762,7 +762,7 @@ class GotJsonManager:
     # === ÉVOLUTION ET FUSION ===
 
     def evolve_got_json(self, old_got_data: Dict, new_json_data: Dict,
-                       original_filename: str, progress_callback: Optional[Callable[[int, int], None]] = None) -> Dict:
+                       original_filename: str, progress_callback: Optional[Callable[[int, int], None]] = None) -> Tuple[Dict, Dict]:
         """
         Fait évoluer un .got.json existant avec un nouveau JSON source.
 
@@ -784,21 +784,46 @@ class GotJsonManager:
             progress_callback: Fonction appelée avec (current, total) pour suivre la progression
 
         Returns:
-            Nouveau .got.json fusionné
+            Tuple (nouveau_got_json, statistiques)
+            statistiques = {
+                "total_entries": int,          # Total d'entrées dans le nouveau
+                "recovered": int,              # Entrées avec traductions récupérées
+                "invalidated": int,            # Entrées dévalidées (ori modifié)
+                "new_entries": int,            # Nouvelles entrées (pas dans l'ancien)
+                "lost_entries": int,           # Entrées perdues (dans ancien mais pas nouveau)
+                "translations_recovered": int  # Nombre total de traductions récupérées
+            }
         """
+        # Initialiser les statistiques
+        stats = {
+            "total_entries": 0,
+            "recovered": 0,
+            "invalidated": 0,
+            "new_entries": 0,
+            "lost_entries": 0,
+            "translations_recovered": 0
+        }
+
         # 1. Créer le nouveau got.json basé sur le nouveau JSON
         new_got_data = self.create_from_json(new_json_data, original_filename)
 
-        # 2. Récupérer tous les chemins traduisibles du nouveau
+        # 2. Récupérer tous les chemins traduisibles du nouveau et de l'ancien
         temp_manager = GotJsonManager(target_languages=self.target_languages)
         temp_manager.data = new_got_data
-        all_paths = temp_manager.get_all_translatable_paths()
+        new_paths = temp_manager.get_all_translatable_paths()
 
-        total = len(all_paths)
+        old_manager = GotJsonManager(target_languages=self.target_languages)
+        old_manager.data = old_got_data
+        old_paths = set(old_manager.get_all_translatable_paths()) if old_manager.is_valid_got_json(old_got_data) else set()
+
+        stats["total_entries"] = len(new_paths)
+        stats["lost_entries"] = len(old_paths - set(new_paths))
+
+        total = len(new_paths)
         current = 0
 
         # 3. Pour chaque chemin dans le nouveau, chercher dans l'ancien
-        for path in all_paths:
+        for path in new_paths:
             current += 1
 
             # Appeler le callback de progression si fourni
@@ -806,14 +831,18 @@ class GotJsonManager:
                 progress_callback(current, total)
 
             # Essayer de récupérer l'entrée dans l'ancien got.json
+            found_in_old = False
             try:
                 old_entry = self._get_entry_from_data(old_got_data, path)
+                # Vérifier que c'est bien une entrée traduisible
+                if isinstance(old_entry, dict) and "ori" in old_entry:
+                    found_in_old = True
             except (KeyError, ValueError, AttributeError):
-                # Le nœud n'existe pas dans l'ancien, on continue
-                continue
+                pass
 
-            # Vérifier que c'est bien une entrée traduisible
-            if not (isinstance(old_entry, dict) and "ori" in old_entry):
+            if not found_in_old:
+                # Le nœud n'existe pas dans l'ancien - c'est une nouvelle entrée
+                stats["new_entries"] += 1
                 continue
 
             # Récupérer l'entrée dans le nouveau got.json
@@ -823,6 +852,9 @@ class GotJsonManager:
             old_ori = old_entry.get("ori", "")
             new_ori = new_entry.get("ori", "")
             ori_changed = (old_ori != new_ori)
+
+            # Marquer comme récupérée
+            entry_has_translations = False
 
             # 4. Pour chaque langue active dans le nouveau got.json
             for lang in self.target_languages:
@@ -842,6 +874,11 @@ class GotJsonManager:
                         "valid": False
                     }
 
+                # Vérifier s'il y a une traduction
+                if old_lang_data.get("text", "").strip():
+                    entry_has_translations = True
+                    stats["translations_recovered"] += 1
+
                 # Copier les données de traduction
                 new_entry[lang] = {
                     "text": old_lang_data.get("text", ""),
@@ -853,11 +890,18 @@ class GotJsonManager:
                 if ori_changed:
                     new_entry[lang]["valid"] = False
 
+            # Mettre à jour les stats
+            if entry_has_translations:
+                stats["recovered"] += 1
+
+            if ori_changed and entry_has_translations:
+                stats["invalidated"] += 1
+
         # Mettre à jour les données du manager
         self.data = new_got_data
         self.original_filename = original_filename
 
-        return new_got_data
+        return new_got_data, stats
 
     def _get_entry_from_data(self, data: Dict, path: str) -> Dict:
         """
