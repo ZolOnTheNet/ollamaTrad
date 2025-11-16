@@ -325,8 +325,14 @@ class MergeDialog:
                 entry_count = len(data.keys())
                 self._add_report_line(f"  Type: Fichier JSON simple")
                 self._add_report_line(f"  Nombre de clés racine: {entry_count}")
-                self._add_report_line(f"  ⚠️ ATTENTION: Fichier sans traductions !")
-                self._add_report_line(f"  → Pour récupérer des traductions, sélectionnez un .got.json")
+
+                # Vérifier si le .got.json correspondant existe
+                if filepath.endswith('.json') and not filepath.endswith('.got.json'):
+                    got_path = Path(filepath).with_suffix('.got.json')
+                    if got_path.exists():
+                        self._add_report_line(f"  ℹ️ Le fichier .got.json correspondant existe et sera utilisé")
+                    else:
+                        self._add_report_line(f"  ℹ️ Pas de .got.json correspondant (sera créé si nécessaire)")
 
             self._add_report_line("")
 

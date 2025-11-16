@@ -440,9 +440,19 @@ class OllamaTradGUI:
                 # Charger les fichiers
                 dialog._add_report_line("📂 Chargement des fichiers...")
 
-                # Charger le fichier source
-                dialog._add_report_line(f"  Lecture du fichier source: {Path(source_file).name}")
-                with open(source_file, 'r', encoding='utf-8') as f:
+                # Charger le fichier source (avec détection automatique .got.json)
+                actual_source_file = source_file
+                source_path = Path(source_file)
+
+                # Si c'est un .json, chercher le .got.json correspondant
+                if source_path.suffix == '.json' and not source_path.name.endswith('.got.json'):
+                    got_path = source_path.with_suffix('.got.json')
+                    if got_path.exists():
+                        actual_source_file = str(got_path)
+                        dialog._add_report_line(f"  ℹ️ Utilisation de {got_path.name} (trouvé à partir de {source_path.name})")
+
+                dialog._add_report_line(f"  Lecture du fichier source: {Path(actual_source_file).name}")
+                with open(actual_source_file, 'r', encoding='utf-8') as f:
                     source_data = json5.load(f)
 
                 # Compter les entrées du fichier source
@@ -456,9 +466,19 @@ class OllamaTradGUI:
                         source_count = len(source_data.keys())
                 dialog._add_report_line(f"  → {source_count} entrée(s) trouvée(s)")
 
-                # Charger le fichier cible
-                dialog._add_report_line(f"  Lecture du fichier cible: {Path(target_file).name}")
-                with open(target_file, 'r', encoding='utf-8') as f:
+                # Charger le fichier cible (avec détection automatique .got.json)
+                actual_target_file = target_file
+                target_path = Path(target_file)
+
+                # Si c'est un .json, chercher le .got.json correspondant
+                if target_path.suffix == '.json' and not target_path.name.endswith('.got.json'):
+                    got_path = target_path.with_suffix('.got.json')
+                    if got_path.exists():
+                        actual_target_file = str(got_path)
+                        dialog._add_report_line(f"  ℹ️ Utilisation de {got_path.name} (trouvé à partir de {target_path.name})")
+
+                dialog._add_report_line(f"  Lecture du fichier cible: {Path(actual_target_file).name}")
+                with open(actual_target_file, 'r', encoding='utf-8') as f:
                     target_data = json5.load(f)
 
                 # Compter les entrées du fichier cible
