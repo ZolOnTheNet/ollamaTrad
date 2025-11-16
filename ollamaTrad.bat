@@ -101,5 +101,5 @@ if %ERRORLEVEL% NEQ 0 (
     pause
     exit /b %ERRORLEVEL%
 )
-
+[Console]::ResetColor()
 exit /b 0

@@ -10,9 +10,10 @@ Ce module gère la transformation des fichiers JSON standards vers le format
 
 import json
 import json5
+import hashlib
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple, Callable
 
 
 class GotJsonManager:
@@ -46,6 +47,23 @@ class GotJsonManager:
         self.data = None
         self.original_filename = None
         self.filepath = None
+
+    # === CHECKSUM ===
+
+    @staticmethod
+    def calculate_checksum(json_data: Dict) -> str:
+        """
+        Calcule le checksum MD5 d'un dictionnaire JSON.
+
+        Args:
+            json_data: Dictionnaire à hasher
+
+        Returns:
+            Chaîne MD5 hexadécimale
+        """
+        # Convertir en JSON avec ordre déterministe pour avoir toujours le même hash
+        json_str = json.dumps(json_data, sort_keys=True, ensure_ascii=False)
+        return hashlib.md5(json_str.encode('utf-8')).hexdigest()
 
     # === VALIDATION ===
 
@@ -163,11 +181,15 @@ class GotJsonManager:
         """
         now = datetime.now().isoformat()
 
+        # Calculer le checksum du JSON source
+        source_checksum = self.calculate_checksum(json_data)
+
         # Créer le header
         got_data = {
             "__ollamafic__": {
                 "version": self.VERSION,
                 "original_file": original_filename,
+                "source_checksum": source_checksum,
                 "created": now,
                 "last_modified": now
             }
@@ -194,11 +216,34 @@ class GotJsonManager:
         """
         entry = self._get_entry_by_path(path)
 
-        if lang not in entry or lang == "ori":
+        if lang == "ori":
             raise ValueError(f"Langue invalide: {lang}")
 
+        # S'assurer que la structure existe pour cette langue
+        if lang not in entry:
+            # Créer la structure pour cette nouvelle langue
+            entry[lang] = {
+                "text": "",
+                "valid": False,
+                "history": []
+            }
+        elif not isinstance(entry[lang], dict):
+            # Ancien format (string directe) - convertir
+            old_text = entry[lang]
+            entry[lang] = {
+                "text": old_text,
+                "valid": False,
+                "history": []
+            }
+        elif "text" not in entry[lang]:
+            # Structure dict mais sans "text" - initialiser
+            entry[lang]["text"] = ""
+
+        if "history" not in entry[lang]:
+            entry[lang]["history"] = []
+
         # Sauvegarder l'ancienne version dans history
-        current_text = entry[lang]["text"]
+        current_text = entry[lang].get("text", "")
         if current_text != "":
             entry[lang]["history"].insert(0, current_text)
 
@@ -713,6 +758,220 @@ class GotJsonManager:
             stats["percentage"] = (stats["translated_entries"] / stats["total_entries"]) * 100
 
         return stats
+
+    # === ÉVOLUTION ET FUSION ===
+
+    def evolve_got_json(self, old_got_data: Dict, new_json_data: Dict,
+                       original_filename: str, progress_callback: Optional[Callable[[int, int], None]] = None) -> Tuple[Dict, Dict]:
+        """
+        Fait évoluer un .got.json existant avec un nouveau JSON source.
+
+        Cette fonction crée un nouveau .got.json basé sur le nouveau JSON,
+        puis récupère les traductions, historiques et validations de l'ancien
+        pour les nœuds correspondants.
+
+        Logique de correspondance:
+        - Les nœuds sont identifiés par leur chemin complet
+        - Si le texte original (ori) a changé:
+          * Le nouveau texte original est utilisé
+          * Les traductions sont conservées (pour référence)
+          * Toutes les validations sont mises à False
+
+        Args:
+            old_got_data: Ancien fichier .got.json
+            new_json_data: Nouveau fichier .json source
+            original_filename: Nom du fichier source
+            progress_callback: Fonction appelée avec (current, total) pour suivre la progression
+
+        Returns:
+            Tuple (nouveau_got_json, statistiques)
+            statistiques = {
+                "total_entries": int,          # Total d'entrées dans le nouveau
+                "recovered": int,              # Entrées avec traductions récupérées
+                "invalidated": int,            # Entrées dévalidées (ori modifié)
+                "new_entries": int,            # Nouvelles entrées (pas dans l'ancien)
+                "lost_entries": int,           # Entrées perdues (dans ancien mais pas nouveau)
+                "translations_recovered": int  # Nombre total de traductions récupérées
+            }
+        """
+        # Initialiser les statistiques
+        stats = {
+            "total_entries": 0,
+            "recovered": 0,
+            "invalidated": 0,
+            "new_entries": 0,
+            "lost_entries": 0,
+            "translations_recovered": 0
+        }
+
+        # 1. Créer le nouveau got.json basé sur le nouveau JSON
+        new_got_data = self.create_from_json(new_json_data, original_filename)
+
+        # 2. Récupérer tous les chemins traduisibles du nouveau et de l'ancien
+        temp_manager = GotJsonManager(target_languages=self.target_languages)
+        temp_manager.data = new_got_data
+        new_paths = temp_manager.get_all_translatable_paths()
+
+        old_manager = GotJsonManager(target_languages=self.target_languages)
+        old_manager.data = old_got_data
+        old_paths = set(old_manager.get_all_translatable_paths()) if old_manager.is_valid_got_json(old_got_data) else set()
+
+        stats["total_entries"] = len(new_paths)
+        stats["lost_entries"] = len(old_paths - set(new_paths))
+
+        total = len(new_paths)
+        current = 0
+
+        # 3. Pour chaque chemin dans le nouveau, chercher dans l'ancien
+        for path in new_paths:
+            current += 1
+
+            # Appeler le callback de progression si fourni
+            if progress_callback:
+                progress_callback(current, total)
+
+            # Essayer de récupérer l'entrée dans l'ancien got.json
+            found_in_old = False
+            try:
+                old_entry = self._get_entry_from_data(old_got_data, path)
+                # Vérifier que c'est bien une entrée traduisible
+                if isinstance(old_entry, dict) and "ori" in old_entry:
+                    found_in_old = True
+            except (KeyError, ValueError, AttributeError):
+                pass
+
+            if not found_in_old:
+                # Le nœud n'existe pas dans l'ancien - c'est une nouvelle entrée
+                stats["new_entries"] += 1
+                continue
+
+            # Récupérer l'entrée dans le nouveau got.json
+            new_entry = temp_manager._get_entry_by_path(path)
+
+            # Comparer les textes originaux
+            old_ori = old_entry.get("ori", "")
+            new_ori = new_entry.get("ori", "")
+            ori_changed = (old_ori != new_ori)
+
+            # Marquer comme récupérée
+            entry_has_translations = False
+
+            # 4. Pour chaque langue active dans le nouveau got.json
+            for lang in self.target_languages:
+                # Vérifier que la langue existe dans l'ancien
+                if lang not in old_entry:
+                    continue
+
+                # Récupérer les données de traduction de l'ancien
+                old_lang_data = old_entry[lang]
+
+                # S'assurer que c'est au format v2.0 (dict)
+                if not isinstance(old_lang_data, dict):
+                    # Ancien format (string directe) - convertir
+                    old_lang_data = {
+                        "text": old_lang_data if isinstance(old_lang_data, str) else "",
+                        "history": [],
+                        "valid": False
+                    }
+
+                # Vérifier s'il y a une traduction
+                if old_lang_data.get("text", "").strip():
+                    entry_has_translations = True
+                    stats["translations_recovered"] += 1
+
+                # Copier les données de traduction
+                new_entry[lang] = {
+                    "text": old_lang_data.get("text", ""),
+                    "history": old_lang_data.get("history", []).copy(),
+                    "valid": old_lang_data.get("valid", False)
+                }
+
+                # Si le texte original a changé, invalider la traduction
+                if ori_changed:
+                    new_entry[lang]["valid"] = False
+
+            # Mettre à jour les stats
+            if entry_has_translations:
+                stats["recovered"] += 1
+
+            if ori_changed and entry_has_translations:
+                stats["invalidated"] += 1
+
+        # Mettre à jour les données du manager
+        self.data = new_got_data
+        self.original_filename = original_filename
+
+        return new_got_data, stats
+
+    def extract_base_json(self, got_json_data: Dict) -> Dict:
+        """
+        Extrait le JSON de base d'un .got.json en enlevant toutes les traductions.
+
+        Parcourt récursivement le .got.json et remplace chaque entrée traduisible
+        { "ori": "texte", "fr": {...}, ... } par juste "texte" (la valeur ori).
+
+        Args:
+            got_json_data: Données du .got.json
+
+        Returns:
+            JSON simple sans traductions
+        """
+        def extract_recursive(obj):
+            if isinstance(obj, dict):
+                # Vérifier si c'est une entrée traduisible
+                if "ori" in obj and isinstance(obj.get("ori"), str):
+                    # C'est une entrée traduisible, retourner juste l'original
+                    return obj["ori"]
+                else:
+                    # C'est un dictionnaire normal, traiter récursivement
+                    result = {}
+                    for key, value in obj.items():
+                        if key != "__ollamafic__":  # Ignorer le header
+                            result[key] = extract_recursive(value)
+                    return result
+            elif isinstance(obj, list):
+                # Traiter chaque élément de la liste
+                return [extract_recursive(item) for item in obj]
+            else:
+                # Valeur primitive, retourner telle quelle
+                return obj
+
+        return extract_recursive(got_json_data)
+
+    def _get_entry_from_data(self, data: Dict, path: str) -> Dict:
+        """
+        Récupère une entrée par son chemin depuis un dictionnaire de données.
+
+        Similaire à _get_entry_by_path mais travaille sur un dict arbitraire.
+
+        Args:
+            data: Dictionnaire de données
+            path: Chemin séparé par / (ex: "app/settings/theme")
+
+        Returns:
+            Dict de l'entrée
+        """
+        if not data:
+            raise ValueError("Aucune donnée fournie")
+
+        parts = path.strip("/").split("/")
+        current = data
+
+        for part in parts:
+            # Gérer les index de liste [n]
+            if "[" in part and "]" in part:
+                key, index = part.split("[")
+                index = int(index.rstrip("]"))
+                if key:
+                    current = current[key]
+                current = current[index]
+            else:
+                if part in current:
+                    current = current[part]
+                else:
+                    raise KeyError(f"Chemin invalide: {path}")
+
+        return current
 
 
 def migrate_old_to_new(old_got_path: str) -> None:

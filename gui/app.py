@@ -32,7 +32,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from core.got_json_manager import GotJsonManager
 from core.ai_client import AIClient
-from utils.file_loader import load_file_intelligently
+from utils.file_loader import load_file_intelligently, load_file_with_evolution_check
 from gui.translation_form import TranslationForm
 from gui.batch_translation_form import BatchTranslationForm
 from gui.chat_panel import ChatPanel
@@ -72,6 +72,9 @@ class OllamaTradGUI:
             "entry": None        # Données de l'entrée actuelle
         }
 
+        # Mode de tri de l'arbre
+        self.tree_sort_mode = "original"  # "original", "ascending", "descending"
+
         # Créer l'interface
         self._create_menu()
         self._create_main_layout()
@@ -91,6 +94,8 @@ class OllamaTradGUI:
         menubar.add_cascade(label="Fichier", menu=file_menu)
         file_menu.add_command(label="Ouvrir JSON/GOT...", command=self.open_file_dialog, accelerator="Ctrl+O")
         file_menu.add_command(label="Sauvegarder", command=self.save_file, accelerator="Ctrl+S")
+        file_menu.add_separator()
+        file_menu.add_command(label="🔄 Fusion de fichiers GOT...", command=self.open_merge_dialog)
         file_menu.add_separator()
 
         # Menu Export (sera créé dynamiquement)
@@ -170,6 +175,22 @@ class OllamaTradGUI:
         # === Zone de recherche ===
         search_frame = ttk.Frame(tree_frame)
         search_frame.pack(fill="x", padx=5, pady=(0, 5))
+
+        # Boutons de tri (à gauche)
+        sort_frame = ttk.Frame(search_frame)
+        sort_frame.pack(side="left", padx=(0, 10))
+
+        ttk.Button(sort_frame, text="↑", width=2,
+                  command=self._sort_tree_ascending,
+                  style="Small.TButton").pack(side="left", padx=1)
+
+        ttk.Button(sort_frame, text="↓", width=2,
+                  command=self._sort_tree_descending,
+                  style="Small.TButton").pack(side="left", padx=1)
+
+        ttk.Button(sort_frame, text="−", width=2,
+                  command=self._sort_tree_original,
+                  style="Small.TButton").pack(side="left", padx=1)
 
         ttk.Label(search_frame, text="Rechercher entrée:",
                  font=("Arial", 8, "bold")).pack(side="left", padx=(0, 5))
@@ -400,6 +421,212 @@ class OllamaTradGUI:
         if filename:
             self.load_file(filename)
 
+    def open_merge_dialog(self):
+        """Ouvre le dialog de fusion simplifié."""
+        # Vérifier qu'un fichier est ouvert
+        if not self.current_file_path:
+            messagebox.showwarning(
+                "Aucun fichier ouvert",
+                "Veuillez d'abord ouvrir un fichier .got.json avant de fusionner."
+            )
+            return
+
+        from gui.dialogs.merge_dialog import MergeDialog
+        from utils.file_loader import create_backup_with_timestamp
+        import json5
+
+        # Créer et afficher le dialog
+        dialog = MergeDialog(self.root, self.current_file_path)
+
+        # Fonction de traitement après sélection
+        def do_merge():
+            print("DEBUG: do_merge() démarré")
+            result = dialog.result
+            if not result:
+                print("DEBUG: Pas de résultat dans do_merge()")
+                dialog.dialog.destroy()
+                return
+
+            source_file, target_file, choice = result
+            print(f"DEBUG: source={source_file}, target={target_file}, choice={choice}")
+
+            try:
+                dialog._add_report_line("🔄 Démarrage de la fusion...")
+                dialog._add_report_line(f"  Fichier source (traductions): {Path(source_file).name}")
+                dialog._add_report_line(f"  Fichier cible (structure): {Path(target_file).name}")
+                dialog._add_report_line("")
+
+                # Charger les fichiers
+                dialog._add_report_line("📂 Chargement des fichiers...")
+
+                # Charger le fichier source (avec détection automatique .got.json)
+                actual_source_file = source_file
+                source_path = Path(source_file)
+
+                # Si c'est un .json, chercher le .got.json correspondant
+                if source_path.suffix == '.json' and not source_path.name.endswith('.got.json'):
+                    got_path = source_path.with_suffix('.got.json')
+                    if got_path.exists():
+                        actual_source_file = str(got_path)
+                        dialog._add_report_line(f"  ℹ️ Utilisation de {got_path.name} (trouvé à partir de {source_path.name})")
+
+                dialog._add_report_line(f"  Lecture du fichier source: {Path(actual_source_file).name}")
+                with open(actual_source_file, 'r', encoding='utf-8') as f:
+                    source_data = json5.load(f)
+
+                # Compter les entrées du fichier source
+                source_count = 0
+                if isinstance(source_data, dict):
+                    if "__ollamafic__" in source_data:
+                        # Fichier .got.json - compter les entrées
+                        source_count = len([k for k in source_data.keys() if k != "__ollamafic__"])
+                    else:
+                        # JSON normal - compter les clés racine
+                        source_count = len(source_data.keys())
+                dialog._add_report_line(f"  → {source_count} entrée(s) trouvée(s)")
+
+                # Charger le fichier cible (avec détection automatique .got.json)
+                actual_target_file = target_file
+                target_path = Path(target_file)
+
+                # Si c'est un .json, chercher le .got.json correspondant
+                if target_path.suffix == '.json' and not target_path.name.endswith('.got.json'):
+                    got_path = target_path.with_suffix('.got.json')
+                    if got_path.exists():
+                        actual_target_file = str(got_path)
+                        dialog._add_report_line(f"  ℹ️ Utilisation de {got_path.name} (trouvé à partir de {target_path.name})")
+
+                dialog._add_report_line(f"  Lecture du fichier cible: {Path(actual_target_file).name}")
+                with open(actual_target_file, 'r', encoding='utf-8') as f:
+                    target_data = json5.load(f)
+
+                # Compter les entrées du fichier cible
+                target_count = 0
+                if isinstance(target_data, dict):
+                    if "__ollamafic__" in target_data:
+                        # Fichier .got.json - compter les entrées
+                        target_count = len([k for k in target_data.keys() if k != "__ollamafic__"])
+                    else:
+                        # JSON normal - compter les clés racine
+                        target_count = len(target_data.keys())
+                dialog._add_report_line(f"  → {target_count} entrée(s) trouvée(s)")
+                dialog._add_report_line("")
+
+                # Créer un backup du fichier actuel
+                dialog._add_report_line("💾 Création du backup...")
+                backup_path = create_backup_with_timestamp(self.current_file_path)
+                dialog._add_report_line(f"  Backup: {Path(backup_path).name}")
+                dialog._add_report_line("")
+
+                # Déterminer le nom du fichier original
+                if isinstance(target_data, dict) and "__ollamafic__" in target_data:
+                    original_filename = target_data["__ollamafic__"].get("original_file", Path(target_file).name)
+                    is_target_got_json = True
+                else:
+                    original_filename = Path(target_file).name
+                    is_target_got_json = False
+
+                # Récupérer les langues
+                target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
+
+                # Créer le gestionnaire
+                from core.got_json_manager import GotJsonManager
+                temp_manager = GotJsonManager(target_languages=target_languages)
+
+                # Si le target est déjà un .got.json, extraire le JSON de base
+                if is_target_got_json:
+                    dialog._add_report_line("  ℹ️ Le fichier cible est déjà un .got.json")
+                    dialog._add_report_line("  → Extraction du JSON de base pour la fusion...")
+
+                    # Convertir le .got.json en .json simple (sans traductions)
+                    base_json = temp_manager.extract_base_json(target_data)
+                    target_data_for_merge = base_json
+                else:
+                    target_data_for_merge = target_data
+
+                # Callback de progression
+                def progress_callback(current, total):
+                    dialog.update_progress(current, total)
+
+                dialog._add_report_line("🔄 Fusion en cours...")
+
+                # Faire la fusion
+                merged_data, stats = temp_manager.evolve_got_json(
+                    source_data,
+                    target_data_for_merge,
+                    original_filename,
+                    progress_callback
+                )
+
+                # Sauvegarder dans le fichier actuel
+                dialog._add_report_line("")
+                dialog._add_report_line("💾 Sauvegarde du résultat...")
+                temp_manager.save_to_file(self.current_file_path)
+
+                # Afficher les stats
+                dialog.show_stats(stats)
+
+                # Recharger le fichier dans l'interface
+                self.got_manager = temp_manager
+
+                # Mettre à jour les formulaires avec le nouveau manager
+                self.translation_form.set_got_manager(self.got_manager)
+                self.batch_form.set_got_manager(self.got_manager)
+
+                # Revenir en mode formulaire normal (si on était en mode batch)
+                if self.batch_form.winfo_ismapped():
+                    self.batch_form.pack_forget()
+
+                self.translation_form.pack(fill=tk.BOTH, expand=True)
+
+                # Recharger l'arbre et marquer comme sauvegardé
+                self._populate_tree()
+                self._mark_as_saved()
+
+                # Message dans le chat
+                self.chat_panel.add_message(
+                    "system",
+                    f"Fusion réussie: {stats['recovered']} entrées récupérées, {stats['new_entries']} nouvelles"
+                )
+
+                self.status_label.config(text="✓ Fusion terminée")
+
+            except Exception as e:
+                dialog._add_report_line("")
+                dialog._add_report_line("❌ ERREUR:")
+                dialog._add_report_line(str(e))
+                dialog.cancel_button.config(state="normal")
+                import traceback
+                traceback.print_exc()
+
+        # Connecter le bouton de fusion
+        original_merge = dialog._on_merge
+
+        def new_on_merge():
+            try:
+                print("DEBUG: new_on_merge appelé")
+                original_merge()
+                print(f"DEBUG: dialog.result = {dialog.result}")
+                if dialog.result:
+                    print("DEBUG: Appel de do_merge()")
+                    do_merge()
+                else:
+                    print("DEBUG: Pas de résultat, annulation")
+            except Exception as e:
+                print(f"ERROR dans new_on_merge: {e}")
+                import traceback
+                traceback.print_exc()
+                dialog._add_report_line("")
+                dialog._add_report_line(f"❌ ERREUR: {str(e)}")
+                dialog.cancel_button.config(state="normal")
+
+        # IMPORTANT: Reconfigurer le bouton pour utiliser notre wrapper
+        # (car le bouton a déjà une référence à l'ancienne méthode)
+        dialog.merge_button.config(command=new_on_merge)
+
+        # Afficher le dialog
+        dialog.show()
+
     def load_file(self, filepath: str):
         """
         Charge un fichier JSON ou .got.json.
@@ -411,12 +638,16 @@ class OllamaTradGUI:
             self.status_label.config(text="Chargement en cours...")
             self.root.update()
 
-            # Utiliser le chargement intelligent
-            self.got_manager, got_path = load_file_intelligently(filepath)
-            self.current_file_path = got_path
+            # Récupérer les langues cibles avant le chargement
+            target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
 
-            # Appliquer les langues configurées par l'utilisateur
-            self.got_manager.target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
+            # Utiliser le chargement intelligent avec détection d'évolution
+            self.got_manager, got_path = load_file_with_evolution_check(
+                filepath,
+                parent_window=self.root,
+                target_languages=target_languages
+            )
+            self.current_file_path = got_path
             self.translation_form.visible_languages = self.translation_config.get("visible_languages", [])
 
             # Mettre à jour le formulaire
@@ -471,6 +702,21 @@ class OllamaTradGUI:
         # Après construction, propager les couleurs à tous les parents
         self._update_all_parent_colors()
 
+    def _sort_tree_ascending(self):
+        """Trie l'arbre par ordre alphabétique croissant (A→Z)."""
+        self.tree_sort_mode = "ascending"
+        self._populate_tree()
+
+    def _sort_tree_descending(self):
+        """Trie l'arbre par ordre alphabétique décroissant (Z→A)."""
+        self.tree_sort_mode = "descending"
+        self._populate_tree()
+
+    def _sort_tree_original(self):
+        """Restaure l'ordre original de l'arbre (tel que dans le JSON)."""
+        self.tree_sort_mode = "original"
+        self._populate_tree()
+
     def _add_tree_node(self, parent_item, current_path, data):
         """
         Ajoute récursivement des nœuds à l'arbre.
@@ -481,7 +727,15 @@ class OllamaTradGUI:
             data: Données à ajouter
         """
         if isinstance(data, dict):
-            for key, value in data.items():
+            # Trier les clés selon le mode de tri
+            keys = list(data.items())
+            if self.tree_sort_mode == "ascending":
+                keys.sort(key=lambda x: str(x[0]).lower())
+            elif self.tree_sort_mode == "descending":
+                keys.sort(key=lambda x: str(x[0]).lower(), reverse=True)
+            # else: "original" - garder l'ordre du dictionnaire
+
+            for key, value in keys:
                 # Ignorer le header __ollamafic__
                 if key == "__ollamafic__":
                     continue

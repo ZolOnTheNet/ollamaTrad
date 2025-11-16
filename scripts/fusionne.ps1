@@ -55,3 +55,6 @@ Write-Host "[SUCCES] Fusion reussie !" -ForegroundColor Green
 Write-Host "  $BrancheClaude" -ForegroundColor Green
 Write-Host "    --> $BRANCH_DEV" -ForegroundColor Green
 Write-Host "=========================================" -ForegroundColor Green
+
+# Réinitialiser les couleurs de la console
+[Console]::ResetColor()

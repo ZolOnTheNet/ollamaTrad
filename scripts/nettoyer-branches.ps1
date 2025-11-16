@@ -81,3 +81,6 @@ if ($CURRENT_BRANCH -ne $BRANCH_DEV) {
 
 Write-Host ""
 Write-Host "✅ Nettoyage terminé !" -ForegroundColor Green
+
+# Réinitialiser les couleurs de la console
+[Console]::ResetColor()
