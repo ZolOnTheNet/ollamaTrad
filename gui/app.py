@@ -436,11 +436,39 @@ class OllamaTradGUI:
 
                 # Charger les fichiers
                 dialog._add_report_line("📂 Chargement des fichiers...")
+
+                # Charger le fichier source
+                dialog._add_report_line(f"  Lecture du fichier source: {Path(source_file).name}")
                 with open(source_file, 'r', encoding='utf-8') as f:
                     source_data = json5.load(f)
 
+                # Compter les entrées du fichier source
+                source_count = 0
+                if isinstance(source_data, dict):
+                    if "__ollamafic__" in source_data:
+                        # Fichier .got.json - compter les entrées
+                        source_count = len([k for k in source_data.keys() if k != "__ollamafic__"])
+                    else:
+                        # JSON normal - compter les clés racine
+                        source_count = len(source_data.keys())
+                dialog._add_report_line(f"  → {source_count} entrée(s) trouvée(s)")
+
+                # Charger le fichier cible
+                dialog._add_report_line(f"  Lecture du fichier cible: {Path(target_file).name}")
                 with open(target_file, 'r', encoding='utf-8') as f:
                     target_data = json5.load(f)
+
+                # Compter les entrées du fichier cible
+                target_count = 0
+                if isinstance(target_data, dict):
+                    if "__ollamafic__" in target_data:
+                        # Fichier .got.json - compter les entrées
+                        target_count = len([k for k in target_data.keys() if k != "__ollamafic__"])
+                    else:
+                        # JSON normal - compter les clés racine
+                        target_count = len(target_data.keys())
+                dialog._add_report_line(f"  → {target_count} entrée(s) trouvée(s)")
+                dialog._add_report_line("")
 
                 # Créer un backup du fichier actuel
                 dialog._add_report_line("💾 Création du backup...")

@@ -44,6 +44,7 @@ class MergeDialogV2:
         # Variables pour progression
         self.progress_var = tk.DoubleVar(value=0)
         self.status_var = tk.StringVar(value="Prêt")
+        self.last_percent_displayed = -1  # Pour afficher tous les 5%
 
         self._create_widgets()
 
@@ -62,7 +63,30 @@ class MergeDialogV2:
 
     def _create_widgets(self):
         """Crée l'interface."""
-        main_frame = ttk.Frame(self.dialog, padding="20")
+        # Frame principal divisé en 2 parties : contenu scrollable + bandeau boutons
+
+        # --- Zone de contenu scrollable ---
+        content_frame = ttk.Frame(self.dialog)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Canvas pour scroll
+        canvas = tk.Canvas(content_frame, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(content_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Contenu dans la zone scrollable
+        main_frame = ttk.Frame(scrollable_frame, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Titre
@@ -161,8 +185,8 @@ class MergeDialogV2:
         self.status_label.pack(anchor=tk.W)
 
         # --- Zone de rapport ---
-        report_frame = ttk.LabelFrame(main_frame, text="📊 Rapport de fusion", padding="10")
-        report_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        report_frame = ttk.LabelFrame(main_frame, text="📋 Informations sur la fusion", padding="10")
+        report_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
         self.report_text = scrolledtext.ScrolledText(
             report_frame,
@@ -173,12 +197,16 @@ class MergeDialogV2:
         )
         self.report_text.pack(fill=tk.BOTH, expand=True)
 
-        # --- Boutons ---
-        buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.pack(fill=tk.X)
+        # --- Bandeau de boutons fixe en bas ---
+        # Séparateur
+        separator = ttk.Separator(self.dialog, orient='horizontal')
+        separator.pack(fill=tk.X)
+
+        buttons_bandeau = ttk.Frame(self.dialog, padding="10")
+        buttons_bandeau.pack(fill=tk.X, side=tk.BOTTOM)
 
         self.cancel_button = ttk.Button(
-            buttons_frame,
+            buttons_bandeau,
             text="Fermer",
             command=self._on_cancel,
             width=15
@@ -186,7 +214,7 @@ class MergeDialogV2:
         self.cancel_button.pack(side=tk.RIGHT, padx=(5, 0))
 
         self.merge_button = ttk.Button(
-            buttons_frame,
+            buttons_bandeau,
             text="🔄 Fusionner",
             command=self._on_merge,
             width=15,
@@ -279,6 +307,20 @@ class MergeDialogV2:
         percent = int((current / total) * 100)
         self.progress_var.set(percent)
         self.status_var.set(f"Fusion en cours... {current}/{total} ({percent}%)")
+
+        # Afficher dans le rapport tous les 5% ou au début/fin
+        if current == 1:
+            # Premier élément
+            self._add_report_line(f"  Traitement de {total} entrées...")
+            self.last_percent_displayed = 0
+        elif current == total:
+            # Dernier élément
+            self._add_report_line(f"  100% - Traitement terminé ({total}/{total})")
+        elif percent >= self.last_percent_displayed + 5:
+            # Tous les 5%
+            self._add_report_line(f"  {percent}% - Entrée {current}/{total}")
+            self.last_percent_displayed = percent
+
         self.dialog.update()
 
     def show_stats(self, stats: Dict):
