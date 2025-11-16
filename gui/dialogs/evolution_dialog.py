@@ -34,8 +34,8 @@ class EvolutionChoiceDialog:
         self.dialog.transient(parent)
         self.dialog.grab_set()
 
-        # Centrer la fenêtre
-        self.dialog.geometry("600x350")
+        # Centrer la fenêtre (hauteur doublée pour voir tous les boutons)
+        self.dialog.geometry("600x700")
         self._center_window(parent)
 
         # Rendre la fenêtre modale
