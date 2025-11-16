@@ -412,12 +412,12 @@ class OllamaTradGUI:
             )
             return
 
-        from gui.dialogs.merge_dialog_v2 import MergeDialogV2
+        from gui.dialogs.merge_dialog import MergeDialog
         from utils.file_loader import create_backup_with_timestamp
         import json5
 
         # Créer et afficher le dialog
-        dialog = MergeDialogV2(self.root, self.current_file_path)
+        dialog = MergeDialog(self.root, self.current_file_path)
 
         # Fonction de traitement après sélection
         def do_merge():
