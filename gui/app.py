@@ -421,12 +421,15 @@ class OllamaTradGUI:
 
         # Fonction de traitement après sélection
         def do_merge():
+            print("DEBUG: do_merge() démarré")
             result = dialog.result
             if not result:
+                print("DEBUG: Pas de résultat dans do_merge()")
                 dialog.dialog.destroy()
                 return
 
             source_file, target_file, choice = result
+            print(f"DEBUG: source={source_file}, target={target_file}, choice={choice}")
 
             try:
                 dialog._add_report_line("🔄 Démarrage de la fusion...")
@@ -536,9 +539,22 @@ class OllamaTradGUI:
         original_merge = dialog._on_merge
 
         def new_on_merge():
-            original_merge()
-            if dialog.result:
-                do_merge()
+            try:
+                print("DEBUG: new_on_merge appelé")
+                original_merge()
+                print(f"DEBUG: dialog.result = {dialog.result}")
+                if dialog.result:
+                    print("DEBUG: Appel de do_merge()")
+                    do_merge()
+                else:
+                    print("DEBUG: Pas de résultat, annulation")
+            except Exception as e:
+                print(f"ERROR dans new_on_merge: {e}")
+                import traceback
+                traceback.print_exc()
+                dialog._add_report_line("")
+                dialog._add_report_line(f"❌ ERREUR: {str(e)}")
+                dialog.cancel_button.config(state="normal")
 
         dialog._on_merge = new_on_merge
 
