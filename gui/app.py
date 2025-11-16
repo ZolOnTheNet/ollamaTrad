@@ -92,6 +92,8 @@ class OllamaTradGUI:
         file_menu.add_command(label="Ouvrir JSON/GOT...", command=self.open_file_dialog, accelerator="Ctrl+O")
         file_menu.add_command(label="Sauvegarder", command=self.save_file, accelerator="Ctrl+S")
         file_menu.add_separator()
+        file_menu.add_command(label="🔄 Fusion de fichiers GOT...", command=self.open_merge_dialog)
+        file_menu.add_separator()
 
         # Menu Export (sera créé dynamiquement)
         self.export_menu = tk.Menu(file_menu, tearoff=0)
@@ -399,6 +401,96 @@ class OllamaTradGUI:
 
         if filename:
             self.load_file(filename)
+
+    def open_merge_dialog(self):
+        """Ouvre le dialog de fusion manuelle de fichiers .got.json."""
+        from gui.dialogs import show_merge_dialog
+        from utils.file_loader import create_backup_with_timestamp
+        import json5
+
+        # Afficher le dialog de sélection
+        result = show_merge_dialog(self.root)
+
+        if not result:
+            return  # Annulé
+
+        source_file, target_file, output_file = result
+
+        try:
+            self.status_label.config(text="Fusion en cours...")
+            self.root.update()
+
+            # Charger les fichiers
+            with open(source_file, 'r', encoding='utf-8') as f:
+                source_data = json5.load(f)
+
+            with open(target_file, 'r', encoding='utf-8') as f:
+                target_data = json5.load(f)
+
+            # Créer un backup du fichier de sortie s'il existe
+            output_path = Path(output_file)
+            if output_path.exists():
+                backup_path = create_backup_with_timestamp(output_file)
+                self.chat_panel.add_message("system", f"Backup créé: {Path(backup_path).name}")
+
+            # Déterminer le nom du fichier original
+            if isinstance(target_data, dict) and "__ollamafic__" in target_data:
+                # Le target est un .got.json
+                original_filename = target_data["__ollamafic__"].get("original_file", Path(target_file).name)
+            else:
+                # Le target est un .json normal
+                original_filename = Path(target_file).name
+
+            # Récupérer les langues configurées
+            target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
+
+            # Créer un gestionnaire temporaire pour la fusion
+            from core.got_json_manager import GotJsonManager
+            temp_manager = GotJsonManager(target_languages=target_languages)
+
+            # Callback de progression
+            def progress_callback(current, total):
+                percent = int((current / total) * 100)
+                self.status_label.config(text=f"Fusion en cours... {percent}%")
+                self.root.update()
+
+            # Faire la fusion
+            merged_data = temp_manager.evolve_got_json(
+                source_data,
+                target_data,
+                original_filename,
+                progress_callback
+            )
+
+            # Sauvegarder le résultat
+            temp_manager.save_to_file(output_file)
+
+            # Afficher un message de succès
+            messagebox.showinfo(
+                "Fusion réussie",
+                f"Les fichiers ont été fusionnés avec succès !\n\n"
+                f"Résultat sauvegardé dans:\n{output_file}"
+            )
+
+            self.chat_panel.add_message(
+                "system",
+                f"Fusion réussie: {Path(source_file).name} + {Path(target_file).name} → {Path(output_file).name}"
+            )
+
+            self.status_label.config(text="✓ Fusion terminée")
+
+            # Proposer de charger le fichier fusionné
+            if messagebox.askyesno(
+                "Charger le fichier ?",
+                "Voulez-vous charger le fichier fusionné dans l'éditeur ?"
+            ):
+                self.load_file(output_file)
+
+        except Exception as e:
+            messagebox.showerror("Erreur de fusion", f"Impossible de fusionner les fichiers:\n{e}")
+            self.status_label.config(text="❌ Erreur de fusion")
+            import traceback
+            traceback.print_exc()
 
     def load_file(self, filepath: str):
         """
