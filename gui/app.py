@@ -72,6 +72,9 @@ class OllamaTradGUI:
             "entry": None        # Données de l'entrée actuelle
         }
 
+        # Mode de tri de l'arbre
+        self.tree_sort_mode = "original"  # "original", "ascending", "descending"
+
         # Créer l'interface
         self._create_menu()
         self._create_main_layout()
@@ -172,6 +175,22 @@ class OllamaTradGUI:
         # === Zone de recherche ===
         search_frame = ttk.Frame(tree_frame)
         search_frame.pack(fill="x", padx=5, pady=(0, 5))
+
+        # Boutons de tri (à gauche)
+        sort_frame = ttk.Frame(search_frame)
+        sort_frame.pack(side="left", padx=(0, 10))
+
+        ttk.Button(sort_frame, text="↑", width=2,
+                  command=self._sort_tree_ascending,
+                  style="Small.TButton").pack(side="left", padx=1)
+
+        ttk.Button(sort_frame, text="↓", width=2,
+                  command=self._sort_tree_descending,
+                  style="Small.TButton").pack(side="left", padx=1)
+
+        ttk.Button(sort_frame, text="−", width=2,
+                  command=self._sort_tree_original,
+                  style="Small.TButton").pack(side="left", padx=1)
 
         ttk.Label(search_frame, text="Rechercher entrée:",
                  font=("Arial", 8, "bold")).pack(side="left", padx=(0, 5))
@@ -683,6 +702,21 @@ class OllamaTradGUI:
         # Après construction, propager les couleurs à tous les parents
         self._update_all_parent_colors()
 
+    def _sort_tree_ascending(self):
+        """Trie l'arbre par ordre alphabétique croissant (A→Z)."""
+        self.tree_sort_mode = "ascending"
+        self._populate_tree()
+
+    def _sort_tree_descending(self):
+        """Trie l'arbre par ordre alphabétique décroissant (Z→A)."""
+        self.tree_sort_mode = "descending"
+        self._populate_tree()
+
+    def _sort_tree_original(self):
+        """Restaure l'ordre original de l'arbre (tel que dans le JSON)."""
+        self.tree_sort_mode = "original"
+        self._populate_tree()
+
     def _add_tree_node(self, parent_item, current_path, data):
         """
         Ajoute récursivement des nœuds à l'arbre.
@@ -693,7 +727,15 @@ class OllamaTradGUI:
             data: Données à ajouter
         """
         if isinstance(data, dict):
-            for key, value in data.items():
+            # Trier les clés selon le mode de tri
+            keys = list(data.items())
+            if self.tree_sort_mode == "ascending":
+                keys.sort(key=lambda x: str(x[0]).lower())
+            elif self.tree_sort_mode == "descending":
+                keys.sort(key=lambda x: str(x[0]).lower(), reverse=True)
+            # else: "original" - garder l'ordre du dictionnaire
+
+            for key, value in keys:
                 # Ignorer le header __ollamafic__
                 if key == "__ollamafic__":
                     continue
