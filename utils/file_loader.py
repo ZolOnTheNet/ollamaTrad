@@ -7,14 +7,50 @@ avec création automatique et gestion des conflits.
 
 import json
 import json5
+import shutil
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Callable
 import sys
 
 # Ajouter le répertoire parent au path pour les imports
 sys.path.append(str(Path(__file__).parent.parent))
 
 from core.got_json_manager import GotJsonManager
+
+
+def detect_source_change(got_data: Dict, json_data: Dict, json_filename: str) -> Tuple[bool, str]:
+    """
+    Détecte si le fichier JSON source a changé depuis la création du .got.json.
+
+    Args:
+        got_data: Données du fichier .got.json
+        json_data: Données du fichier .json actuel
+        json_filename: Nom du fichier .json
+
+    Returns:
+        Tuple (changed, reason):
+        - changed: True si le fichier a changé
+        - reason: Description du changement ("filename", "checksum", "none")
+    """
+    if not isinstance(got_data, dict) or "__ollamafic__" not in got_data:
+        return False, "none"
+
+    header = got_data["__ollamafic__"]
+
+    # 1. Vérifier le nom de fichier
+    original_file = header.get("original_file", "")
+    if original_file != json_filename:
+        return True, "filename"
+
+    # 2. Vérifier le checksum
+    stored_checksum = header.get("source_checksum", "")
+    if stored_checksum:
+        current_checksum = GotJsonManager.calculate_checksum(json_data)
+        if stored_checksum != current_checksum:
+            return True, "checksum"
+
+    return False, "none"
 
 
 def load_translation_settings() -> Dict:
@@ -227,3 +263,176 @@ def get_file_info(filepath: str) -> Dict:
         info["error"] = str(e)
 
     return info
+
+
+def create_backup_with_timestamp(filepath: str) -> str:
+    """
+    Crée une copie de backup d'un fichier avec un timestamp.
+
+    Format: toto.backup.YYYYMMDD_HHMM.got.json
+
+    Args:
+        filepath: Chemin du fichier à sauvegarder
+
+    Returns:
+        Chemin du fichier de backup créé
+
+    Raises:
+        FileNotFoundError: Si le fichier source n'existe pas
+    """
+    path = Path(filepath)
+
+    if not path.exists():
+        raise FileNotFoundError(f"Le fichier {filepath} n'existe pas")
+
+    # Générer le timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+
+    # Construire le nom du backup
+    # Exemple: messages.got.json -> messages.backup.20251116_1042.got.json
+    if path.suffix == '.json':
+        # Gérer le cas .got.json
+        if path.stem.endswith('.got'):
+            base_name = path.stem[:-4]  # Enlever '.got'
+            backup_name = f"{base_name}.backup.{timestamp}.got.json"
+        else:
+            base_name = path.stem
+            backup_name = f"{base_name}.backup.{timestamp}.json"
+    else:
+        # Autres extensions
+        base_name = path.stem
+        backup_name = f"{base_name}.backup.{timestamp}{path.suffix}"
+
+    backup_path = path.parent / backup_name
+
+    # Copier le fichier
+    shutil.copy2(filepath, backup_path)
+
+    return str(backup_path)
+
+
+def load_file_with_evolution_check(filepath: str, parent_window=None, target_languages: Optional[list] = None,
+                                   progress_callback: Optional[Callable[[int, int], None]] = None) -> Tuple[GotJsonManager, str]:
+    """
+    Charge un fichier avec détection de changement et gestion de l'évolution.
+
+    Version GUI qui utilise le dialog de choix si le fichier source a changé.
+
+    Args:
+        filepath: Chemin vers le fichier à charger
+        parent_window: Fenêtre parente pour les dialogs (None = mode console)
+        target_languages: Langues cibles
+        progress_callback: Callback pour la progression (current, total)
+
+    Returns:
+        Tuple (GotJsonManager, chemin_got_json_utilisé)
+
+    Raises:
+        FileNotFoundError: Si le fichier n'existe pas
+        ValueError: Si l'opération est annulée
+    """
+    path = Path(filepath)
+
+    if not path.exists():
+        raise FileNotFoundError(f"Le fichier {filepath} n'existe pas")
+
+    # Charger les paramètres
+    settings = load_translation_settings()
+    if target_languages is None:
+        target_languages = settings.get("target_languages", ["fr"])
+
+    # Créer le gestionnaire
+    got_manager = GotJsonManager(target_languages=target_languages)
+
+    # Lire le fichier
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = json5.load(f)
+
+    # CAS 1: Fichier .got.json valide
+    if got_manager.is_valid_got_json(data):
+        got_manager.data = data
+        got_manager.filepath = str(path)
+        got_manager.original_filename = data["__ollamafic__"]["original_file"]
+        return got_manager, str(path)
+
+    # CAS 2: Fichier .json source
+    json_filename = path.name
+    got_path = path.with_suffix('.got.json')
+
+    # Le .got.json existe-t-il ?
+    if got_path.exists():
+        with open(got_path, 'r', encoding='utf-8') as f:
+            got_data = json5.load(f)
+
+        # Détecter si le fichier source a changé
+        changed, reason = detect_source_change(got_data, data, json_filename)
+
+        if changed:
+            # Le fichier source a changé - demander à l'utilisateur
+            backup_filename = Path(create_backup_with_timestamp(str(got_path))).name
+
+            if parent_window:
+                # Mode GUI - utiliser le dialog
+                from gui.dialogs import EvolutionChoiceDialog
+                dialog = EvolutionChoiceDialog(parent_window, json_filename, got_path.name, backup_filename)
+                choice = dialog.show()
+            else:
+                # Mode console - utiliser input()
+                print(f"\n⚠️  Le fichier source a changé ({reason})")
+                print(f"   JSON source: {json_filename}")
+                print(f"   Got.json: {got_path.name}")
+                print(f"   Backup créé: {backup_filename}")
+                print("\nOptions:")
+                print("  [N]ouveau - Créer un nouveau .got.json")
+                print("  [É]volution - Fusionner ancien + nouveau (recommandé)")
+                print("  [A]ncien - Utiliser l'ancien .got.json")
+                choice_input = input("\nVotre choix [É]: ").lower() or 'é'
+
+                if choice_input in ['n', 'nouveau']:
+                    choice = "nouveau"
+                elif choice_input in ['a', 'ancien']:
+                    choice = "ancien"
+                else:
+                    choice = "evolution"
+
+            # Traiter le choix
+            if choice == "nouveau":
+                # Créer un nouveau .got.json
+                got_data = got_manager.create_from_json(data, json_filename)
+                got_manager.save_to_file(str(got_path))
+                return got_manager, str(got_path)
+
+            elif choice == "evolution":
+                # Faire évoluer le .got.json
+                got_manager.evolve_got_json(got_data, data, json_filename, progress_callback)
+                got_manager.save_to_file(str(got_path))
+                return got_manager, str(got_path)
+
+            elif choice == "ancien":
+                # Utiliser l'ancien .got.json
+                got_manager.data = got_data
+                got_manager.filepath = str(got_path)
+                got_manager.original_filename = json_filename
+                return got_manager, str(got_path)
+
+            else:
+                # Annulé
+                raise ValueError("Opération annulée par l'utilisateur")
+
+        else:
+            # Pas de changement détecté - utiliser le .got.json existant
+            got_manager.data = got_data
+            got_manager.filepath = str(got_path)
+            got_manager.original_filename = json_filename
+            return got_manager, str(got_path)
+
+    # Le .got.json n'existe pas - créer un nouveau
+    if settings.get("auto_create_got_json", True):
+        got_data = got_manager.create_from_json(data, json_filename)
+        got_manager.save_to_file(str(got_path))
+        return got_manager, str(got_path)
+    else:
+        # Charger le JSON tel quel
+        got_manager.data = data
+        got_manager.filepath = str(path)
+        return got_manager, str(path)

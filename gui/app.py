@@ -32,7 +32,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from core.got_json_manager import GotJsonManager
 from core.ai_client import AIClient
-from utils.file_loader import load_file_intelligently
+from utils.file_loader import load_file_intelligently, load_file_with_evolution_check
 from gui.translation_form import TranslationForm
 from gui.batch_translation_form import BatchTranslationForm
 from gui.chat_panel import ChatPanel
@@ -411,12 +411,16 @@ class OllamaTradGUI:
             self.status_label.config(text="Chargement en cours...")
             self.root.update()
 
-            # Utiliser le chargement intelligent
-            self.got_manager, got_path = load_file_intelligently(filepath)
-            self.current_file_path = got_path
+            # Récupérer les langues cibles avant le chargement
+            target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
 
-            # Appliquer les langues configurées par l'utilisateur
-            self.got_manager.target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
+            # Utiliser le chargement intelligent avec détection d'évolution
+            self.got_manager, got_path = load_file_with_evolution_check(
+                filepath,
+                parent_window=self.root,
+                target_languages=target_languages
+            )
+            self.current_file_path = got_path
             self.translation_form.visible_languages = self.translation_config.get("visible_languages", [])
 
             # Mettre à jour le formulaire

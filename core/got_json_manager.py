@@ -10,9 +10,10 @@ Ce module gère la transformation des fichiers JSON standards vers le format
 
 import json
 import json5
+import hashlib
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple, Callable
 
 
 class GotJsonManager:
@@ -46,6 +47,23 @@ class GotJsonManager:
         self.data = None
         self.original_filename = None
         self.filepath = None
+
+    # === CHECKSUM ===
+
+    @staticmethod
+    def calculate_checksum(json_data: Dict) -> str:
+        """
+        Calcule le checksum MD5 d'un dictionnaire JSON.
+
+        Args:
+            json_data: Dictionnaire à hasher
+
+        Returns:
+            Chaîne MD5 hexadécimale
+        """
+        # Convertir en JSON avec ordre déterministe pour avoir toujours le même hash
+        json_str = json.dumps(json_data, sort_keys=True, ensure_ascii=False)
+        return hashlib.md5(json_str.encode('utf-8')).hexdigest()
 
     # === VALIDATION ===
 
@@ -163,11 +181,15 @@ class GotJsonManager:
         """
         now = datetime.now().isoformat()
 
+        # Calculer le checksum du JSON source
+        source_checksum = self.calculate_checksum(json_data)
+
         # Créer le header
         got_data = {
             "__ollamafic__": {
                 "version": self.VERSION,
                 "original_file": original_filename,
+                "source_checksum": source_checksum,
                 "created": now,
                 "last_modified": now
             }
@@ -736,6 +758,141 @@ class GotJsonManager:
             stats["percentage"] = (stats["translated_entries"] / stats["total_entries"]) * 100
 
         return stats
+
+    # === ÉVOLUTION ET FUSION ===
+
+    def evolve_got_json(self, old_got_data: Dict, new_json_data: Dict,
+                       original_filename: str, progress_callback: Optional[Callable[[int, int], None]] = None) -> Dict:
+        """
+        Fait évoluer un .got.json existant avec un nouveau JSON source.
+
+        Cette fonction crée un nouveau .got.json basé sur le nouveau JSON,
+        puis récupère les traductions, historiques et validations de l'ancien
+        pour les nœuds correspondants.
+
+        Logique de correspondance:
+        - Les nœuds sont identifiés par leur chemin complet
+        - Si le texte original (ori) a changé:
+          * Le nouveau texte original est utilisé
+          * Les traductions sont conservées (pour référence)
+          * Toutes les validations sont mises à False
+
+        Args:
+            old_got_data: Ancien fichier .got.json
+            new_json_data: Nouveau fichier .json source
+            original_filename: Nom du fichier source
+            progress_callback: Fonction appelée avec (current, total) pour suivre la progression
+
+        Returns:
+            Nouveau .got.json fusionné
+        """
+        # 1. Créer le nouveau got.json basé sur le nouveau JSON
+        new_got_data = self.create_from_json(new_json_data, original_filename)
+
+        # 2. Récupérer tous les chemins traduisibles du nouveau
+        temp_manager = GotJsonManager(target_languages=self.target_languages)
+        temp_manager.data = new_got_data
+        all_paths = temp_manager.get_all_translatable_paths()
+
+        total = len(all_paths)
+        current = 0
+
+        # 3. Pour chaque chemin dans le nouveau, chercher dans l'ancien
+        for path in all_paths:
+            current += 1
+
+            # Appeler le callback de progression si fourni
+            if progress_callback:
+                progress_callback(current, total)
+
+            # Essayer de récupérer l'entrée dans l'ancien got.json
+            try:
+                old_entry = self._get_entry_from_data(old_got_data, path)
+            except (KeyError, ValueError, AttributeError):
+                # Le nœud n'existe pas dans l'ancien, on continue
+                continue
+
+            # Vérifier que c'est bien une entrée traduisible
+            if not (isinstance(old_entry, dict) and "ori" in old_entry):
+                continue
+
+            # Récupérer l'entrée dans le nouveau got.json
+            new_entry = temp_manager._get_entry_by_path(path)
+
+            # Comparer les textes originaux
+            old_ori = old_entry.get("ori", "")
+            new_ori = new_entry.get("ori", "")
+            ori_changed = (old_ori != new_ori)
+
+            # 4. Pour chaque langue active dans le nouveau got.json
+            for lang in self.target_languages:
+                # Vérifier que la langue existe dans l'ancien
+                if lang not in old_entry:
+                    continue
+
+                # Récupérer les données de traduction de l'ancien
+                old_lang_data = old_entry[lang]
+
+                # S'assurer que c'est au format v2.0 (dict)
+                if not isinstance(old_lang_data, dict):
+                    # Ancien format (string directe) - convertir
+                    old_lang_data = {
+                        "text": old_lang_data if isinstance(old_lang_data, str) else "",
+                        "history": [],
+                        "valid": False
+                    }
+
+                # Copier les données de traduction
+                new_entry[lang] = {
+                    "text": old_lang_data.get("text", ""),
+                    "history": old_lang_data.get("history", []).copy(),
+                    "valid": old_lang_data.get("valid", False)
+                }
+
+                # Si le texte original a changé, invalider la traduction
+                if ori_changed:
+                    new_entry[lang]["valid"] = False
+
+        # Mettre à jour les données du manager
+        self.data = new_got_data
+        self.original_filename = original_filename
+
+        return new_got_data
+
+    def _get_entry_from_data(self, data: Dict, path: str) -> Dict:
+        """
+        Récupère une entrée par son chemin depuis un dictionnaire de données.
+
+        Similaire à _get_entry_by_path mais travaille sur un dict arbitraire.
+
+        Args:
+            data: Dictionnaire de données
+            path: Chemin séparé par / (ex: "app/settings/theme")
+
+        Returns:
+            Dict de l'entrée
+        """
+        if not data:
+            raise ValueError("Aucune donnée fournie")
+
+        parts = path.strip("/").split("/")
+        current = data
+
+        for part in parts:
+            # Gérer les index de liste [n]
+            if "[" in part and "]" in part:
+                key, index = part.split("[")
+                index = int(index.rstrip("]"))
+                if key:
+                    current = current[key]
+                current = current[index]
+            else:
+                if part in current:
+                    current = current[part]
+                else:
+                    raise KeyError(f"Chemin invalide: {path}")
+
+        return current
 
 
 def migrate_old_to_new(old_got_path: str) -> None:
