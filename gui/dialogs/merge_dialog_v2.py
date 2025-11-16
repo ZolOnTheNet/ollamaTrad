@@ -3,9 +3,10 @@ Dialog de fusion simplifié - Part du fichier actuel
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog, scrolledtext
+from tkinter import ttk, filedialog, scrolledtext, messagebox
 from pathlib import Path
 from typing import Optional, Tuple, Callable, Dict
+import json5
 
 
 class MergeDialogV2:
@@ -47,6 +48,11 @@ class MergeDialogV2:
         self.last_percent_displayed = -1  # Pour afficher tous les 5%
 
         self._create_widgets()
+
+        # Analyser le fichier actuel pour afficher les informations de base
+        self._add_report_line("📄 Fichier actuellement ouvert")
+        self._add_report_line("═" * 60)
+        self._analyze_file(current_file_path)
 
     def _center_window(self, parent):
         """Centre la fenêtre."""
@@ -252,6 +258,9 @@ class MergeDialogV2:
                 text=f"Garder la structure du fichier à fusionner ({Path(filename).name})"
             )
 
+            # Analyser le fichier immédiatement
+            self._analyze_file(filename)
+
     def _add_report_line(self, text: str):
         """Ajoute une ligne au rapport."""
         self.report_text.config(state='normal')
@@ -260,10 +269,80 @@ class MergeDialogV2:
         self.report_text.config(state='disabled')
         self.dialog.update()
 
+    def _analyze_file(self, filepath: str):
+        """
+        Analyse un fichier et affiche ses informations dans le rapport.
+
+        Args:
+            filepath: Chemin du fichier à analyser
+        """
+        try:
+            self._add_report_line("📊 Analyse du fichier sélectionné...")
+            self._add_report_line(f"  Fichier: {Path(filepath).name}")
+
+            # Charger le fichier
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = json5.load(f)
+
+            if not isinstance(data, dict):
+                self._add_report_line("  ⚠️ Format non reconnu (pas un objet JSON)")
+                return
+
+            # Compter les entrées
+            is_got_json = "__ollamafic__" in data
+            if is_got_json:
+                entry_count = len([k for k in data.keys() if k != "__ollamafic__"])
+                self._add_report_line(f"  Type: Fichier .got.json")
+                self._add_report_line(f"  Nombre d'entrées: {entry_count}")
+
+                # Analyser les langues disponibles (regarder les premières entrées)
+                languages = set()
+                entries_checked = 0
+                max_check = 10  # Regarder les 10 premières entrées
+
+                for key, value in data.items():
+                    if key == "__ollamafic__":
+                        continue
+
+                    if isinstance(value, dict):
+                        # Chercher les clés de langue
+                        for lang_key in value.keys():
+                            if lang_key in ["ori", "fr", "en", "es", "de", "it", "ja", "zh", "ru", "pt", "ar"]:
+                                languages.add(lang_key)
+
+                    entries_checked += 1
+                    if entries_checked >= max_check:
+                        break
+
+                if languages:
+                    langs_str = ", ".join(sorted(languages))
+                    self._add_report_line(f"  Langues détectées: {langs_str}")
+                    self._add_report_line(f"  (analyse sur {entries_checked} entrée(s))")
+                else:
+                    self._add_report_line(f"  Langues: non détectées")
+
+            else:
+                # JSON simple
+                entry_count = len(data.keys())
+                self._add_report_line(f"  Type: Fichier JSON simple")
+                self._add_report_line(f"  Nombre de clés racine: {entry_count}")
+
+            self._add_report_line("")
+
+        except Exception as e:
+            self._add_report_line(f"  ❌ Erreur lors de l'analyse: {str(e)}")
+            self._add_report_line("")
+
     def _on_merge(self):
         """Lance la fusion."""
         if not self.merge_file:
             return
+
+        # Message immédiat pour montrer que le traitement démarre
+        self._add_report_line("═" * 60)
+        self._add_report_line("🔄 LANCEMENT DE LA FUSION")
+        self._add_report_line("═" * 60)
+        self._add_report_line("")
 
         # Désactiver les boutons
         self.merge_button.config(state="disabled")
