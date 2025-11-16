@@ -502,8 +502,10 @@ class OllamaTradGUI:
                 # Déterminer le nom du fichier original
                 if isinstance(target_data, dict) and "__ollamafic__" in target_data:
                     original_filename = target_data["__ollamafic__"].get("original_file", Path(target_file).name)
+                    is_target_got_json = True
                 else:
                     original_filename = Path(target_file).name
+                    is_target_got_json = False
 
                 # Récupérer les langues
                 target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
@@ -511,6 +513,17 @@ class OllamaTradGUI:
                 # Créer le gestionnaire
                 from core.got_json_manager import GotJsonManager
                 temp_manager = GotJsonManager(target_languages=target_languages)
+
+                # Si le target est déjà un .got.json, extraire le JSON de base
+                if is_target_got_json:
+                    dialog._add_report_line("  ℹ️ Le fichier cible est déjà un .got.json")
+                    dialog._add_report_line("  → Extraction du JSON de base pour la fusion...")
+
+                    # Convertir le .got.json en .json simple (sans traductions)
+                    base_json = temp_manager.extract_base_json(target_data)
+                    target_data_for_merge = base_json
+                else:
+                    target_data_for_merge = target_data
 
                 # Callback de progression
                 def progress_callback(current, total):
@@ -521,7 +534,7 @@ class OllamaTradGUI:
                 # Faire la fusion
                 merged_data, stats = temp_manager.evolve_got_json(
                     source_data,
-                    target_data,
+                    target_data_for_merge,
                     original_filename,
                     progress_callback
                 )
@@ -536,14 +549,20 @@ class OllamaTradGUI:
 
                 # Recharger le fichier dans l'interface
                 self.got_manager = temp_manager
-                self._populate_tree()
-                self._mark_as_saved()
+
+                # Mettre à jour les formulaires avec le nouveau manager
+                self.translation_form.set_got_manager(self.got_manager)
+                self.batch_form.set_got_manager(self.got_manager)
 
                 # Revenir en mode formulaire normal (si on était en mode batch)
-                if self.batch_form and self.batch_form.winfo_ismapped():
+                if self.batch_form.winfo_ismapped():
                     self.batch_form.pack_forget()
-                if self.translation_form:
-                    self.translation_form.pack(fill=tk.BOTH, expand=True)
+
+                self.translation_form.pack(fill=tk.BOTH, expand=True)
+
+                # Recharger l'arbre et marquer comme sauvegardé
+                self._populate_tree()
+                self._mark_as_saved()
 
                 # Message dans le chat
                 self.chat_panel.add_message(

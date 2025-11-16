@@ -903,6 +903,41 @@ class GotJsonManager:
 
         return new_got_data, stats
 
+    def extract_base_json(self, got_json_data: Dict) -> Dict:
+        """
+        Extrait le JSON de base d'un .got.json en enlevant toutes les traductions.
+
+        Parcourt récursivement le .got.json et remplace chaque entrée traduisible
+        { "ori": "texte", "fr": {...}, ... } par juste "texte" (la valeur ori).
+
+        Args:
+            got_json_data: Données du .got.json
+
+        Returns:
+            JSON simple sans traductions
+        """
+        def extract_recursive(obj):
+            if isinstance(obj, dict):
+                # Vérifier si c'est une entrée traduisible
+                if "ori" in obj and isinstance(obj.get("ori"), str):
+                    # C'est une entrée traduisible, retourner juste l'original
+                    return obj["ori"]
+                else:
+                    # C'est un dictionnaire normal, traiter récursivement
+                    result = {}
+                    for key, value in obj.items():
+                        if key != "__ollamafic__":  # Ignorer le header
+                            result[key] = extract_recursive(value)
+                    return result
+            elif isinstance(obj, list):
+                # Traiter chaque élément de la liste
+                return [extract_recursive(item) for item in obj]
+            else:
+                # Valeur primitive, retourner telle quelle
+                return obj
+
+        return extract_recursive(got_json_data)
+
     def _get_entry_from_data(self, data: Dict, path: str) -> Dict:
         """
         Récupère une entrée par son chemin depuis un dictionnaire de données.
