@@ -556,7 +556,9 @@ class OllamaTradGUI:
                 dialog._add_report_line(f"❌ ERREUR: {str(e)}")
                 dialog.cancel_button.config(state="normal")
 
-        dialog._on_merge = new_on_merge
+        # IMPORTANT: Reconfigurer le bouton pour utiliser notre wrapper
+        # (car le bouton a déjà une référence à l'ancienne méthode)
+        dialog.merge_button.config(command=new_on_merge)
 
         # Afficher le dialog
         dialog.show()
