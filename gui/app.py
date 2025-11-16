@@ -403,102 +403,119 @@ class OllamaTradGUI:
             self.load_file(filename)
 
     def open_merge_dialog(self):
-        """Ouvre le dialog de fusion manuelle de fichiers .got.json."""
-        from gui.dialogs import show_merge_dialog
+        """Ouvre le dialog de fusion simplifié."""
+        # Vérifier qu'un fichier est ouvert
+        if not self.current_file_path:
+            messagebox.showwarning(
+                "Aucun fichier ouvert",
+                "Veuillez d'abord ouvrir un fichier .got.json avant de fusionner."
+            )
+            return
+
+        from gui.dialogs.merge_dialog_v2 import MergeDialogV2
         from utils.file_loader import create_backup_with_timestamp
         import json5
 
-        # Afficher le dialog de sélection
-        result = show_merge_dialog(self.root)
+        # Créer et afficher le dialog
+        dialog = MergeDialogV2(self.root, self.current_file_path)
 
-        if not result:
-            return  # Annulé
+        # Fonction de traitement après sélection
+        def do_merge():
+            result = dialog.result
+            if not result:
+                dialog.dialog.destroy()
+                return
 
-        source_file, target_file, output_file = result
+            source_file, target_file, choice = result
 
-        try:
-            self.status_label.config(text="Fusion en cours...")
-            self.root.update()
+            try:
+                dialog._add_report_line("🔄 Démarrage de la fusion...")
+                dialog._add_report_line(f"  Fichier source (traductions): {Path(source_file).name}")
+                dialog._add_report_line(f"  Fichier cible (structure): {Path(target_file).name}")
+                dialog._add_report_line("")
 
-            # Charger les fichiers
-            with open(source_file, 'r', encoding='utf-8') as f:
-                source_data = json5.load(f)
+                # Charger les fichiers
+                dialog._add_report_line("📂 Chargement des fichiers...")
+                with open(source_file, 'r', encoding='utf-8') as f:
+                    source_data = json5.load(f)
 
-            with open(target_file, 'r', encoding='utf-8') as f:
-                target_data = json5.load(f)
+                with open(target_file, 'r', encoding='utf-8') as f:
+                    target_data = json5.load(f)
 
-            # Créer un backup du fichier de sortie s'il existe
-            output_path = Path(output_file)
-            if output_path.exists():
-                backup_path = create_backup_with_timestamp(output_file)
-                self.chat_panel.add_message("system", f"Backup créé: {Path(backup_path).name}")
+                # Créer un backup du fichier actuel
+                dialog._add_report_line("💾 Création du backup...")
+                backup_path = create_backup_with_timestamp(self.current_file_path)
+                dialog._add_report_line(f"  Backup: {Path(backup_path).name}")
+                dialog._add_report_line("")
 
-            # Déterminer le nom du fichier original
-            if isinstance(target_data, dict) and "__ollamafic__" in target_data:
-                # Le target est un .got.json
-                original_filename = target_data["__ollamafic__"].get("original_file", Path(target_file).name)
-            else:
-                # Le target est un .json normal
-                original_filename = Path(target_file).name
+                # Déterminer le nom du fichier original
+                if isinstance(target_data, dict) and "__ollamafic__" in target_data:
+                    original_filename = target_data["__ollamafic__"].get("original_file", Path(target_file).name)
+                else:
+                    original_filename = Path(target_file).name
 
-            # Récupérer les langues configurées
-            target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
+                # Récupérer les langues
+                target_languages = self.translation_config.get("target_languages", ["fr", "en", "es"])
 
-            # Créer un gestionnaire temporaire pour la fusion
-            from core.got_json_manager import GotJsonManager
-            temp_manager = GotJsonManager(target_languages=target_languages)
+                # Créer le gestionnaire
+                from core.got_json_manager import GotJsonManager
+                temp_manager = GotJsonManager(target_languages=target_languages)
 
-            # Callback de progression
-            def progress_callback(current, total):
-                percent = int((current / total) * 100)
-                self.status_label.config(text=f"Fusion en cours... {percent}%")
-                self.root.update()
+                # Callback de progression
+                def progress_callback(current, total):
+                    dialog.update_progress(current, total)
 
-            # Faire la fusion
-            merged_data, stats = temp_manager.evolve_got_json(
-                source_data,
-                target_data,
-                original_filename,
-                progress_callback
-            )
+                dialog._add_report_line("🔄 Fusion en cours...")
 
-            # Sauvegarder le résultat
-            temp_manager.save_to_file(output_file)
+                # Faire la fusion
+                merged_data, stats = temp_manager.evolve_got_json(
+                    source_data,
+                    target_data,
+                    original_filename,
+                    progress_callback
+                )
 
-            # Préparer le rapport de fusion
-            report = (
-                f"Fusion terminée avec succès !\n\n"
-                f"📊 Statistiques:\n"
-                f"  • Total d'entrées: {stats['total_entries']}\n"
-                f"  • Traductions récupérées: {stats['recovered']} entrées ({stats['translations_recovered']} traductions)\n"
-                f"  • Nouvelles entrées: {stats['new_entries']}\n"
-                f"  • Entrées dévalidées: {stats['invalidated']}\n"
-                f"  • Entrées perdues: {stats['lost_entries']}\n\n"
-                f"Résultat sauvegardé dans:\n{output_file}"
-            )
+                # Sauvegarder dans le fichier actuel
+                dialog._add_report_line("")
+                dialog._add_report_line("💾 Sauvegarde du résultat...")
+                temp_manager.save_to_file(self.current_file_path)
 
-            # Afficher le rapport
-            messagebox.showinfo("Fusion réussie", report)
+                # Afficher les stats
+                dialog.show_stats(stats)
 
-            self.chat_panel.add_message(
-                "system",
-                f"Fusion réussie: {Path(source_file).name} + {Path(target_file).name} → {Path(output_file).name}"
-            )
+                # Recharger le fichier dans l'interface
+                self.got_manager = temp_manager
+                self._populate_tree()
+                self._mark_as_saved()
 
-            self.status_label.config(text="✓ Fusion terminée")
+                # Message dans le chat
+                self.chat_panel.add_message(
+                    "system",
+                    f"Fusion réussie: {stats['recovered']} entrées récupérées, {stats['new_entries']} nouvelles"
+                )
 
-            # Proposer de charger le fichier fusionné
-            if messagebox.askyesno(
-                "Charger le fichier ?",
-                "Voulez-vous charger le fichier fusionné dans l'éditeur ?"
-            ):
-                self.load_file(output_file)
+                self.status_label.config(text="✓ Fusion terminée")
 
-        except Exception as e:
-            messagebox.showerror("Erreur de fusion", f"Impossible de fusionner les fichiers:\n{e}")
-            self.status_label.config(text="❌ Erreur de fusion")
-            import traceback
-            traceback.print_exc()
+            except Exception as e:
+                dialog._add_report_line("")
+                dialog._add_report_line("❌ ERREUR:")
+                dialog._add_report_line(str(e))
+                dialog.cancel_button.config(state="normal")
+                import traceback
+                traceback.print_exc()
+
+        # Connecter le bouton de fusion
+        original_merge = dialog._on_merge
+
+        def new_on_merge():
+            original_merge()
+            if dialog.result:
+                do_merge()
+
+        dialog._on_merge = new_on_merge
+
+        # Afficher le dialog
+        dialog.show()
 
     def load_file(self, filepath: str):
         """

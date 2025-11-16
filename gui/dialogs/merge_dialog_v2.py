@@ -1,0 +1,302 @@
+"""
+Dialog de fusion simplifié - Part du fichier actuel
+"""
+
+import tkinter as tk
+from tkinter import ttk, filedialog, scrolledtext
+from pathlib import Path
+from typing import Optional, Tuple, Callable, Dict
+
+
+class MergeDialogV2:
+    """
+    Dialog simplifié pour fusionner le fichier .got.json actuel avec un autre fichier.
+
+    Workflow:
+    1. Fichier actuel = base de départ
+    2. Sélection d'un fichier à fusionner (JSON ou got.json)
+    3. Choix du fichier à garder comme structure
+    4. Exécution avec progression et rapport
+    """
+
+    def __init__(self, parent, current_file_path: str):
+        """
+        Args:
+            parent: Fenêtre parente
+            current_file_path: Chemin du fichier .got.json actuellement ouvert
+        """
+        self.current_file = current_file_path
+        self.merge_file: Optional[str] = None
+        self.keep_structure: str = "current"  # "current" ou "other"
+        self.result: Optional[Tuple[str, str, str]] = None  # (source, target, choice)
+
+        # Créer la fenêtre
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("Fusion de fichiers")
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+
+        self.dialog.geometry("800x600")
+        self._center_window(parent)
+
+        self.dialog.protocol("WM_DELETE_WINDOW", self._on_cancel)
+
+        # Variables pour progression
+        self.progress_var = tk.DoubleVar(value=0)
+        self.status_var = tk.StringVar(value="Prêt")
+
+        self._create_widgets()
+
+    def _center_window(self, parent):
+        """Centre la fenêtre."""
+        self.dialog.update_idletasks()
+        width = self.dialog.winfo_width()
+        height = self.dialog.winfo_height()
+        parent_x = parent.winfo_x()
+        parent_y = parent.winfo_y()
+        parent_width = parent.winfo_width()
+        parent_height = parent.winfo_height()
+        x = parent_x + (parent_width - width) // 2
+        y = parent_y + (parent_height - height) // 2
+        self.dialog.geometry(f"+{x}+{y}")
+
+    def _create_widgets(self):
+        """Crée l'interface."""
+        main_frame = ttk.Frame(self.dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Titre
+        title_label = ttk.Label(
+            main_frame,
+            text="🔄 Fusion de fichiers",
+            font=("Segoe UI", 14, "bold")
+        )
+        title_label.pack(pady=(0, 10))
+
+        # Description
+        desc_label = ttk.Label(
+            main_frame,
+            text="Fusionnez le fichier actuel avec un autre fichier (JSON ou .got.json)",
+            justify=tk.CENTER,
+            foreground="gray"
+        )
+        desc_label.pack(pady=(0, 20))
+
+        # --- Fichier actuel ---
+        current_frame = ttk.LabelFrame(main_frame, text="📄 Fichier actuel (ouvert)", padding="10")
+        current_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(
+            current_frame,
+            text=Path(self.current_file).name,
+            font=("Consolas", 10, "bold"),
+            foreground="blue"
+        ).pack(anchor=tk.W)
+
+        # --- Fichier à fusionner ---
+        merge_frame = ttk.LabelFrame(main_frame, text="📥 Fichier à fusionner", padding="10")
+        merge_frame.pack(fill=tk.X, pady=(0, 10))
+
+        merge_path_frame = ttk.Frame(merge_frame)
+        merge_path_frame.pack(fill=tk.X)
+
+        self.merge_entry = ttk.Entry(merge_path_frame, width=60)
+        self.merge_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+
+        ttk.Button(merge_path_frame, text="📁 Parcourir...", command=self._browse_merge).pack(side=tk.LEFT)
+
+        ttk.Label(
+            merge_frame,
+            text="💡 Choisissez un .json (structure) ou .got.json (structure + traductions)",
+            font=("Segoe UI", 8),
+            foreground="gray"
+        ).pack(anchor=tk.W, pady=(5, 0))
+
+        # --- Choix de la structure ---
+        choice_frame = ttk.LabelFrame(main_frame, text="🎯 Quel fichier garder comme structure ?", padding="10")
+        choice_frame.pack(fill=tk.X, pady=(0, 15))
+
+        self.structure_var = tk.StringVar(value="current")
+
+        ttk.Radiobutton(
+            choice_frame,
+            text=f"Garder la structure du fichier actuel ({Path(self.current_file).name})",
+            variable=self.structure_var,
+            value="current"
+        ).pack(anchor=tk.W, pady=2)
+
+        self.other_radio = ttk.Radiobutton(
+            choice_frame,
+            text="Garder la structure du fichier à fusionner",
+            variable=self.structure_var,
+            value="other",
+            state="disabled"
+        )
+        self.other_radio.pack(anchor=tk.W, pady=2)
+
+        ttk.Label(
+            choice_frame,
+            text="Le fichier gardé définit la structure finale. Les traductions sont récupérées de l'autre.",
+            font=("Segoe UI", 8),
+            foreground="gray"
+        ).pack(anchor=tk.W, pady=(5, 0))
+
+        # --- Barre de progression ---
+        progress_frame = ttk.Frame(main_frame)
+        progress_frame.pack(fill=tk.X, pady=(0, 10))
+
+        self.progress_bar = ttk.Progressbar(
+            progress_frame,
+            variable=self.progress_var,
+            maximum=100,
+            mode='determinate'
+        )
+        self.progress_bar.pack(fill=tk.X, pady=(0, 5))
+
+        self.status_label = ttk.Label(
+            progress_frame,
+            textvariable=self.status_var,
+            foreground="gray"
+        )
+        self.status_label.pack(anchor=tk.W)
+
+        # --- Zone de rapport ---
+        report_frame = ttk.LabelFrame(main_frame, text="📊 Rapport de fusion", padding="10")
+        report_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+
+        self.report_text = scrolledtext.ScrolledText(
+            report_frame,
+            height=10,
+            wrap=tk.WORD,
+            font=("Consolas", 9),
+            state='disabled'
+        )
+        self.report_text.pack(fill=tk.BOTH, expand=True)
+
+        # --- Boutons ---
+        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame.pack(fill=tk.X)
+
+        self.cancel_button = ttk.Button(
+            buttons_frame,
+            text="Fermer",
+            command=self._on_cancel,
+            width=15
+        )
+        self.cancel_button.pack(side=tk.RIGHT, padx=(5, 0))
+
+        self.merge_button = ttk.Button(
+            buttons_frame,
+            text="🔄 Fusionner",
+            command=self._on_merge,
+            width=15,
+            style="Accent.TButton",
+            state="disabled"
+        )
+        self.merge_button.pack(side=tk.RIGHT)
+
+        # Bind
+        self.dialog.bind("<Escape>", lambda e: self._on_cancel())
+
+    def _browse_merge(self):
+        """Sélectionner le fichier à fusionner."""
+        filename = filedialog.askopenfilename(
+            parent=self.dialog,
+            title="Sélectionner le fichier à fusionner",
+            filetypes=[
+                ("Tous fichiers JSON", "*.json *.got.json"),
+                ("Fichiers GOT JSON", "*.got.json"),
+                ("Fichiers JSON", "*.json"),
+                ("Tous les fichiers", "*.*")
+            ]
+        )
+        if filename:
+            self.merge_entry.delete(0, tk.END)
+            self.merge_entry.insert(0, filename)
+            self.merge_file = filename
+
+            # Activer le bouton de fusion et le radio button
+            self.merge_button.config(state="normal")
+            self.other_radio.config(state="normal")
+
+            # Mettre à jour le texte du radio button
+            self.other_radio.config(
+                text=f"Garder la structure du fichier à fusionner ({Path(filename).name})"
+            )
+
+    def _add_report_line(self, text: str):
+        """Ajoute une ligne au rapport."""
+        self.report_text.config(state='normal')
+        self.report_text.insert(tk.END, text + "\n")
+        self.report_text.see(tk.END)
+        self.report_text.config(state='disabled')
+        self.dialog.update()
+
+    def _on_merge(self):
+        """Lance la fusion."""
+        if not self.merge_file:
+            return
+
+        # Désactiver les boutons
+        self.merge_button.config(state="disabled")
+        self.cancel_button.config(state="disabled")
+
+        # Déterminer la structure
+        keep_current = (self.structure_var.get() == "current")
+
+        if keep_current:
+            source_file = self.merge_file  # Traductions viennent de l'autre
+            target_file = self.current_file  # Structure du courant
+        else:
+            source_file = self.current_file  # Traductions viennent du courant
+            target_file = self.merge_file  # Structure de l'autre
+
+        self.result = (source_file, target_file, self.structure_var.get())
+
+        # Le traitement sera fait par la fonction appelante
+        # On retourne juste les infos nécessaires
+
+    def _on_cancel(self):
+        """Annulation."""
+        self.result = None
+        self.dialog.destroy()
+
+    def show(self) -> Optional[Tuple[str, str, str]]:
+        """
+        Affiche le dialog.
+
+        Returns:
+            Tuple (source_file, target_file, choice) ou None si annulé
+            - source_file: Fichier source des traductions
+            - target_file: Fichier pour la structure
+            - choice: "current" ou "other"
+        """
+        self.dialog.wait_window()
+        return self.result
+
+    def update_progress(self, current: int, total: int):
+        """Met à jour la barre de progression."""
+        percent = int((current / total) * 100)
+        self.progress_var.set(percent)
+        self.status_var.set(f"Fusion en cours... {current}/{total} ({percent}%)")
+        self.dialog.update()
+
+    def show_stats(self, stats: Dict):
+        """Affiche les statistiques de fusion."""
+        self._add_report_line("=" * 60)
+        self._add_report_line("✅ FUSION TERMINÉE")
+        self._add_report_line("=" * 60)
+        self._add_report_line("")
+        self._add_report_line(f"📊 Statistiques:")
+        self._add_report_line(f"  • Total d'entrées dans le résultat: {stats['total_entries']}")
+        self._add_report_line(f"  • Entrées avec traductions récupérées: {stats['recovered']}")
+        self._add_report_line(f"  • Nombre de traductions récupérées: {stats['translations_recovered']}")
+        self._add_report_line(f"  • Nouvelles entrées (sans traductions): {stats['new_entries']}")
+        self._add_report_line(f"  • Entrées dévalidées (texte original modifié): {stats['invalidated']}")
+        self._add_report_line(f"  • Entrées perdues (supprimées): {stats['lost_entries']}")
+        self._add_report_line("")
+        self._add_report_line("✓ Le fichier a été sauvegardé avec succès")
+
+        # Réactiver les boutons
+        self.cancel_button.config(state="normal", text="Fermer")
+        self.status_var.set("Fusion terminée !")
