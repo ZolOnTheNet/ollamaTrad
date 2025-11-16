@@ -519,6 +519,12 @@ class OllamaTradGUI:
                 self._populate_tree()
                 self._mark_as_saved()
 
+                # Revenir en mode formulaire normal (si on était en mode batch)
+                if self.batch_form and self.batch_form.winfo_ismapped():
+                    self.batch_form.pack_forget()
+                if self.translation_form:
+                    self.translation_form.pack(fill=tk.BOTH, expand=True)
+
                 # Message dans le chat
                 self.chat_panel.add_message(
                     "system",

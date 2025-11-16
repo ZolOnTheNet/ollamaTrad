@@ -325,6 +325,8 @@ class MergeDialog:
                 entry_count = len(data.keys())
                 self._add_report_line(f"  Type: Fichier JSON simple")
                 self._add_report_line(f"  Nombre de clés racine: {entry_count}")
+                self._add_report_line(f"  ⚠️ ATTENTION: Fichier sans traductions !")
+                self._add_report_line(f"  → Pour récupérer des traductions, sélectionnez un .got.json")
 
             self._add_report_line("")
 
